@@ -1,0 +1,174 @@
+\section{Background Noise Tests}
+\subsection{Background Noise Tests - 10 Minute Datasets}
+This portion of the test should be completed in its entirety immediately after section 2. All photodiodes must be capped for this test, three of the ten minute tests should be run with the lab lights, three should be run with the lab lights off, and three should be run with ASIO in a dark box and the lab lights off.
+
+
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{center}
+\begin{longtable}{|C{0.3in}|m{3.25in}|C{1.75in}|}
+\caption{Background Noise Test 10 Minute Datasets Guide - Step by Step} \\
+\hline
+\# & \textbf{Description} & \textbf{Notes}  \\
+\hline
+\endfirsthead
+
+\hline
+\# & \textbf{Description} & \textbf{Notes} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+3.1 & Start with room lights on, start the testing software on the computer. & \\
+\hline
+3.2 & Collect a 10 minute dataset, verify that mean and standard deviation meets expectations using the GSE software. Record the mean and standard deviation in the table below. & \\
+\hline
+3.3 & Repeat this process two additional times for a total of three datasets. & \\
+\hline
+3.4 & Clearly name datasets, include a number to keep data in chronological order, date (YYYYMMDD), test type, and trial.
+Example: 01\_20250818\_background\_lights\_1.csv
+ & \\
+\hline
+3.5 & Repeat step 3.2, 3 additional times with the lab room lights off. Record the mean and standard deviation for each in the table below. & \\
+\hline
+3.6 & Switch the short comms cable with the longer comms cable for the dark box testing, this way the RS-422 to USB converter can be outside the dark box. & \\
+\hline
+3.7 &  Repeat step 3.2, 3 additional times with the lab room lights off and with ASIO in a dark box. Record the mean and standard deviation for each trial in the table below. & \\
+\hline
+3.8 & Store all test datasets in a clearly labeled file that includes test name and date. Upload a copy to GitLab under the science testing results section (MUSE/Science/testing-results) under the Labtop branch. Refer to the README in the testing-results repo for organization  & \\
+\hline
+
+\end{longtable}
+\end{center}
+
+
+
+\begin {center}
+\begin{longtable}{|C{1in}|C{2in}|C{2in}|}
+\caption{Background Noise 10 Minute Data Collection Table} \\
+\hline
+\textbf{Test} & \textbf {Mean (V)} & \textbf{Std Dev (fA)} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Test} & \textbf {Mean (V)} & \textbf{Std Dev (fA)} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+\textbf{Lights - 1} & &  \\
+\hline
+\textbf{Lights - 2} & & \\
+\hline
+\textbf{Lights - 3} & &  \\
+\hline
+\textbf{Lights off - 1} & & \\
+\hline
+\textbf{Lights off - 2} & & \\
+\hline
+\textbf{Lights off - 3} & & \\
+\hline
+\textbf{Dark box - 1} & & \\
+\hline
+\textbf{Dark box - 2} & & \\
+\hline
+\textbf{Dark box - 3} & & \\
+\hline
+
+\end{longtable}
+\end{center}
+
+\textit{$^*$Note: There should not be an appreciable difference in mean signal between the three states (lights, lights off, or dark box). If a difference in mean value is measured it indicates a potential light leak and further investigation should be done before moving on to the next portion of the test. Additionally, evaluate the FFT for each of these datasets, a prominent spike at 20 Hz indicates a light leak.}
+
+\subsection{Background Noise Tests - 12 Hour Datasets}
+
+This portion of the test should be completed after section 3.1 and should take place over two consecutive days. All photodiodes must be capped for this test and the room lights should be turned off during data collection. These tests will involve leaving ASIO powered on overnight. The purpose of collecting long datasets is to determine whether long term trends exist in the background noise data that are not apparent on shorter time frames. 
+
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{center}
+\begin{longtable}{|C{0.3in}|m{3.25in}|C{1.75in}|}
+\caption{Background Noise Test Guide - Step by Step} \\
+\hline
+\# & \textbf{Description} & \textbf{Notes}  \\
+\hline
+\endfirsthead
+
+\hline
+\# & \textbf{Description} & \textbf{Notes} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+3.21 & Configuration of ASIO is the same as section 3.1 & \\
+\hline
+
+3.22 & This test should be initiated at the end of the day, (ideally this will occur after section 3.1 has been completed) with the expectation that a test engineer will be in the following day to verify the data. & \\
+\hline
+
+3.23 & Collect a 12 hour dataset, verify that mean and standard deviation meets expectations using the GSE software. Record the mean and standard deviation in the table below. & \\
+\hline
+
+3.24 & Clearly name dataset, include a number to keep data in chronological order, date (YYYYMMDD), test type, and trial. Example: 01\_20250818\_background\_12hr\_1.csv & \\
+\hline
+
+3.25 & Repeat steps 3.23 - 3.24 and collect a second 12 hour dataset & \\
+\hline 
+
+3.26 & Store all test datasets in a clearly labeled file that includes test name and date. Upload a copy to GitLab under the science testing results section (MUSE/Science/testing-results) under the Labtop branch. Refer to the README in the testing-results repo for organization  & \\
+\hline
+
+\end{longtable}
+\end{center}
+
+\begin {center}
+\begin{longtable}{|C{1in}|C{2in}|C{2in}|}
+\caption{Background Noise 12 Hour Data Collection Table} \\
+\hline
+\textbf{Test} & \textbf {Mean (V)} & \textbf{Std Dev (fA)} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Test} & \textbf {Mean (V)} & \textbf{Std Dev (fA)} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+\textbf{Trial - 1} & &  \\
+\hline
+\textbf{Trial - 2} & & \\
+\hline
+
+\end{longtable}
+\end{center}
+
+\textit{$^*$Note: Current analysis software is unable to analyze 12 hour datasets, they are two large. Split the dataset into 1 hour chunks and analyze separately. An optimized code should be written to handle larger datasets.}
+
+\subsection{Background Baseline}
+The data from the lights off section of table six will be used to generate expectation values that will be used for the remainder of the testing series. Run the python script titled Background\_Noise\_Expectations.py, the arguments will be the names of the three csvs that contain the lights off data. This data will be bootstrapped and a mean expectation value and uncertainties will be generated. Update expectations in the Limited Performance Test document (ASIO-TEST-0026), this will update all other testing documents when the LPT section is refreshed. 

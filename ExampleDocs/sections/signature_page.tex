@@ -1,0 +1,33 @@
+% signature_page.tex
+% Template: Jake Davis, Tyler Holliday
+
+%% build arrays
+%------------------------------
+\newarray\Names
+\readarray{Names}{\firstName&\secondName&\thirdName&\fourthName&\fifthName&\sixthName}
+\newarray\Titles
+\readarray{Titles}{\firstNameTitle&\secondNameTitle&\thirdNameTitle&\fourthNameTitle&\fifthNameTitle&\sixthNameTitle}
+\newarray\Orgs
+\readarray{Orgs}{\firstNameOrg&\secondNameOrg&\thirdNameOrg&\fourthNameOrg&\fifthNameOrg&\sixthNameOrg}
+%------------------------------
+
+% Document title
+%------------------------------
+%\vspace*{0.25in}
+\begin{center}
+	\LARGE{\textbf{\docTitle}}
+\end{center}
+\vspace{.1in}
+%------------------------------
+
+%% populate signers fields
+%------------------------------
+\foreach \jj in {1,...,\signersCount}{
+	\vspace{0.3in}
+	\rule{3in}{1pt} \hfill \rule{1.5in}{1pt}\\
+	\small\textbf{\Names(\jj)} \hfill Date \hspace{1.15in} \\
+	\Titles(\jj) \\
+	\Orgs(\jj) \\
+	
+}
+%------------------------------

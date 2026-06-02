@@ -1,0 +1,146 @@
+% Testing Plan Overview
+% 02_section.tex
+% Author: Sarah Pawlowski
+% Date: 1/14/25
+
+%% begin text
+\section{Limited Performance Test (LPT)}
+
+This test includes portions of sections 2 and 3.1 of the Comprehensive Performance Test
+(CPT), document ASIO-SYSE-0016. These tests are done as a quick evaluation that the in-
+strument is functioning as expected and to establish a baseline before collecting data associated with a test on the EM. All photodiodes should be capped for this test, they can be performed with lights on or off in lab 244 or the SSEL.
+
+\subsection{Test Setup}
+
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{center}
+\begin{longtable}{|C{0.3in}|m{4.25in}|C{0.75in}|} 
+\caption{Test Setup Guide - Step by Step} \\
+\hline
+\# & \textbf{Description} & \textbf{Initials} \\
+\hline
+\endfirsthead
+
+\hline
+\# & \textbf{Description} & \textbf{Initials} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{3}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+2.1 & Set the bench power supply to output +28 V. Set the current limit to 200 mA (0.2 A). Make sure the output is off. & \\ 
+\hline
+2.2 & Make sure that all test engineers are wearing ESD smocks and grounding wrist straps. Follow ESD protection protocols throughout the testing process. & \\ 
+\hline
+2.3 & Plug the ASIO communication cable into the communication D-Sub connector. Reference figure \ref{fig:ASIO Connector Interface}.& \\ 
+\hline
+2.4 & Plug the RS422 into the ASIO communication cable and the testing computer. & \\ 
+\hline
+2.5 & Attach the bench supply cables to the correct pins in the ASIO power D-Sub connector. Reference figure \ref{fig:ASIO Connector Interface}.& \\ 
+\hline
+2.6 & Make sure that the bench supply power cables are separated and will not short at any point during this test. & \\ 
+\hline
+\end{longtable}
+\end{center}
+
+\subsection{Electrical Tests}
+
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{center}
+\begin{longtable}{|C{0.3in}|m{3.25in}|C{1in}|C{0.75in}|}
+\caption{Electrical Test Guide - Test Setup} \\
+\hline
+\# & \textbf{Electric Test Setup} & \textbf{Expected/ Measured} & \textbf{Initials} \\
+\hline
+\endfirsthead
+
+\hline
+\# & \textbf{Electric Test Setup} & \textbf{Expected/ Measured} & \textbf{Initials} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{4}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+2.21 & Start the testing software on the computer. & NA &  \\
+\hline
+2.22 & Enable the +28V output on the bench power supply. \textbf{Record the current} output of the bench supply about ten seconds after turn-on. & 
+\begin{tabular}{l}
+62mA$\pm$10mA \\
+value:
+\end{tabular} & \\
+\hline
+2.23 & Record the temperatures from ASIO's internal censors, found in health data of the ASIO packet. This should be displayed by the GSE. & & \\
+\hline
+2.24 & Record the digital system \textbf{current} measured by the ASIO instrument, found in the health data of the ASIO packet. This should be displayed by the GSE. &
+\begin{tabular}{l}
+32mA$\pm$5mA \\
+value:
+\end{tabular} & \\
+\hline
+2.25 & Record the bus \textbf{voltage} measured by the ASIO instrument. This is found in the health data of the ASIO packet and should be displayed by the GSE. & 
+\begin{tabular}{l}
+3.3V$\pm$0.05V \\
+value:
+\end{tabular} & \\
+\hline
+2.26 & Verify that the ASIO instrument is sending packets to the testing computer about once every 0.5 seconds, use the packet counter found in the health data of the ASIO packet and should be displayed by the GSE. & YES & \\
+\hline
+2.27 & Collect and analyze a 5 minute dataset with no signal input to establish a baseline. Record the mean and std dev for each channel in the table below. & NA & \\
+\hline
+
+\end{longtable}
+\end{center}
+
+\begin {center}
+\begin{longtable}{|C{0.7in}|C{1.5in}|C{1.5in}|C{1.8in}|}
+\caption{Baseline Data Table} \\
+\hline
+\textbf{Channel} & \textbf{Mean Expected (V)} & \textbf {Mean Measured (V)} & \textbf{Std Dev Measured (V)} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Channel} & \textbf{Mean Expected (V)} & \textbf {Mean Measured (V)} & \textbf{Std Dev Measured (V)} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{4}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+\textbf{SXR1} & $6.08339e^-3$ & & \\
+\hline
+\textbf{SXR2} & $6.02614e^-3$& & \\
+\hline
+\textbf{SXR3} & $6.04632e^-3$& & \\
+\hline
+\textbf{SXR4} & $5.96000e^-3$ & & \\
+\hline
+\textbf{HXR} & $6.13372e^-3$ & & \\
+\hline
+\textbf{EUV} & $6.00174e^-3$& & \\
+\hline
+
+\end{longtable}
+\end{center}
+
+\textit{$^*$Note: These expectation values were calculated using Background\_Noise\_Expectations.py which is located on Gitlab in the science branch under testing-results/analysis/04\_EM\_Testing. These should be updated with each new configuration of ASIO and will require ASIO Background Noise Test to be repeated.}
+
+\newpage
+
+

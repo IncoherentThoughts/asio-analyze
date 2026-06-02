@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asio-analyze"
+version = "0.1.0"
+description = "CLI for analyzing ASIO test data."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Sarah, Evan" }]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "matplotlib",
+    "fpdf2",
+]
+
+[project.scripts]
+asio-analyze = "asio_analyze.cli:main"
+asio-gui = "asio_analyze.gui:main"
+
+[tool.setuptools.packages.find]
+include = ["asio_analyze*"]
+
+[tool.setuptools.package-data]
+asio_analyze = ["expectation_values/*"]

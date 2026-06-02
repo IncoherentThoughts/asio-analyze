@@ -1,0 +1,647 @@
+"""LaTeX-based report builders for the asio-analyze CLI.
+
+Each `create_*_report` is the LaTeX-styled drop-in replacement for the old
+`create_*_pdf` builders in `pdf.py`. Reports are styled to match existing ASIO
+documentation (helvet sans-serif, fancy header band with doc number, booktabs
++ longtable, figure[H] floats) so they can be appended to existing test
+documents as an appendix.
+
+Public surface:
+    create_default_report(filename, stats_basic, duration_s, raw_voltages_img,
+                          subtitle=None, note=None, section_offset=0)
+    create_background_report(filename, stats_basic, raw_voltages_img,
+                             cleaned_hist_img, subtitle=None, note=None,
+                             section_offset=0)
+    create_fe55_report(filename, stats_basic, raw_voltages_img,
+                       subtitle=None, note=None, section_offset=0)
+    create_full_report(filename, stats_raw_full, stats_detrended_full,
+                       duration_s, image_paths, subtitle=None, note=None,
+                       section_offset=0)
+
+All four call signatures mirror the legacy `pdf.py` ones with one addition:
+`section_offset` (default 0) emits `\\setcounter{section}{N}` so the report's
+section numbers continue from a parent document when appended.
+
+Each `filename` must end in `.pdf`; a `.tex` file with the same stem is
+written alongside it for transparency / debugging.
+"""
+
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+from datetime import date
+
+from . import get_data
+
+
+# ---------------------------------------------------------------------------
+# Shared input prep (moved from pdf.py)
+# ---------------------------------------------------------------------------
+
+_ANALYSIS_CHANNEL_NAMES = {"SXR1", "SXR2", "SXR3", "SXR4", "HXR", "EUV"}
+
+
+def _is_analysis_format(file_path):
+    """True when the CSV is already in the (channel-name, samples...) layout
+    that `get_data.dictionary_to_csv` emits. Detected by checking that the
+    first column of the first row is one of the canonical channel names."""
+    try:
+        with open(file_path, "r") as f:
+            first = f.readline()
+    except OSError:
+        return False
+    if not first:
+        return False
+    head = first.split(",", 1)[0].strip()
+    return head in _ANALYSIS_CHANNEL_NAMES
+
+
+def _prepare_analysis_csv(file_path):
+    """Parse an ASIO packet CSV into the GSE-formatted CSV used by analysis fns.
+
+    Returns the path to the temporary analysis CSV (under <dir>/misc/output.csv).
+    If `file_path` is already in the analysis layout (channel-name first column),
+    it is returned unchanged so already-prepared inputs flow through untouched.
+    """
+    if _is_analysis_format(file_path):
+        return file_path
+    data_dictionary = get_data.get_data_dict(file_path)
+    misc_dir = os.path.join(os.path.dirname(file_path), "misc")
+    os.makedirs(misc_dir, exist_ok=True)
+    analysis_csv = os.path.join(misc_dir, "output.csv")
+    get_data.dictionary_to_csv(data_dictionary, analysis_csv)
+    return analysis_csv
+
+
+# ---------------------------------------------------------------------------
+# pdflatex discovery
+# ---------------------------------------------------------------------------
+
+_CANDIDATE_PDFLATEX = [
+    "/Library/TeX/texbin/pdflatex",
+    "/usr/local/texlive/2025basic/bin/universal-darwin/pdflatex",
+    "/usr/local/texlive/2025/bin/universal-darwin/pdflatex",
+    "/usr/local/texlive/2024/bin/universal-darwin/pdflatex",
+    "/usr/local/texlive/2023/bin/universal-darwin/pdflatex",
+    "/usr/local/texlive/2022/bin/universal-darwin/pdflatex",
+]
+
+
+def _find_pdflatex():
+    for path in _CANDIDATE_PDFLATEX:
+        if os.path.exists(path):
+            return path
+    on_path = shutil.which("pdflatex")
+    if on_path:
+        return on_path
+    raise RuntimeError(
+        "pdflatex not found. Install a TeX distribution (TeX Live or MiKTeX) "
+        "and ensure `pdflatex` is on PATH."
+    )
+
+
+# ---------------------------------------------------------------------------
+# LaTeX preamble
+# ---------------------------------------------------------------------------
+
+PREAMBLE_TEMPLATE = r"""\documentclass[12pt]{article}
+\usepackage[scaled]{helvet}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{ragged2e}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage[skip=12pt]{parskip}
+\usepackage{enumitem}
+\usepackage[font={small,it}]{caption}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{underscore}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor,colortbl}
+\usepackage{fancyhdr}
+
+\renewcommand\familydefault{\sfdefault}
+\captionsetup{justification=centering,singlelinecheck=false,format=hang}
+\geometry{letterpaper, margin=1in}
+\graphicspath{ {./} }
+\pagenumbering{arabic}
+\renewcommand\arraystretch{1.5}
+\setlength\LTleft\fill
+\setlength\LTright\fill
+
+\newcommand{\PreserveBackslash}[1]{\let\temp=\\#1\let\\=\temp}
+\newcolumntype{C}[1]{>{\PreserveBackslash\centering}p{#1}}
+\newcolumntype{R}[1]{>{\PreserveBackslash\raggedleft}p{#1}}
+\newcolumntype{L}[1]{>{\PreserveBackslash\raggedright}p{#1}}
+
+\newcommand{\docAbr}{__DOC_ABR__}
+\newcommand{\docNum}{__DOC_NUM__}
+\newcommand{\dateEdit}{__DATE__}
+\newcommand{\revNum}{0.0}
+
+\newgeometry{top=1.25in,left=1in,right=1in,bottom=1in,headheight=0.8in,headsep=24pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{gray}{\docAbr} \vspace{6pt}}
+\fancyhead[C]{\textcolor{gray}{\docNum} \vspace{6pt}}
+\fancyhead[R]{\textcolor{gray}{\dateEdit} \vspace{6pt}}
+\fancyfoot[R]{Page: \hspace{6pt} \thepage}
+\fancyfoot[L]{\textcolor{gray}{Revision~\revNum}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\captionsetup{belowskip=0pt}
+\captionsetup{aboveskip=10pt}
+"""
+
+
+def _doc_number_from_csv(csv_basename):
+    """Make a header doc-number tag like `ASIO-ANALYSIS-01-20250918-BG-LIGHTS-1`.
+
+    Dashes (not underscores) are used because the value is interpolated into
+    `\\textcolor{gray}{...}` in the page header where `_` would trigger a
+    math-mode error.
+    """
+    stem = os.path.splitext(os.path.basename(csv_basename))[0]
+    safe = re.sub(r"[^A-Za-z0-9-]+", "-", stem).strip("-").upper()
+    return f"ASIO-ANALYSIS-{safe}"
+
+
+def _preamble(csv_subtitle):
+    doc_num = _doc_number_from_csv(csv_subtitle) if csv_subtitle else "ASIO-ANALYSIS"
+    return (PREAMBLE_TEMPLATE
+            .replace("__DOC_ABR__", "ASIO ANALYSIS")
+            .replace("__DOC_NUM__", doc_num)
+            .replace("__DATE__", date.today().strftime("%m/%d/%Y")))
+
+
+# ---------------------------------------------------------------------------
+# Formatting helpers
+# ---------------------------------------------------------------------------
+
+def _fmt_sci(x):
+    """Format a float as `$m.mmmm \times 10^{n}$` (LaTeX math mode)."""
+    if x == 0:
+        return r"$0$"
+    s = f"{x:.4e}"
+    mant, exp = s.split("e")
+    return f"${mant} \\times 10^{{{int(exp)}}}$"
+
+
+def _tex_escape(text):
+    """Minimal escape for free-form note text in body paragraphs."""
+    if text is None:
+        return ""
+    replacements = [
+        ("\\", r"\textbackslash{}"),
+        ("&", r"\&"),
+        ("%", r"\%"),
+        ("$", r"\$"),
+        ("#", r"\#"),
+        ("_", r"\_"),
+        ("{", r"\{"),
+        ("}", r"\}"),
+        ("~", r"\textasciitilde{}"),
+        ("^", r"\textasciicircum{}"),
+    ]
+    out = text
+    for a, b in replacements:
+        out = out.replace(a, b)
+    return out
+
+
+def _stats_longtable(stats, columns, caption, label):
+    """Render a stats longtable.
+
+    `columns` is the header row including 'Channel' as the first column.
+    `stats` rows are [name, val1, val2, ...] aligned to `columns[1:]`.
+    All numeric values are rendered via `_fmt_sci`.
+    """
+    n_cols = len(columns)
+    if n_cols < 2:
+        raise ValueError("need at least Channel + 1 data column")
+    # Column widths: first column 0.9in, remaining share equally up to ~5.4in
+    data_w = round(5.4 / (n_cols - 1), 2)
+    col_spec = "|C{0.9in}|" + "|".join([f"C{{{data_w}in}}"] * (n_cols - 1)) + "|"
+    header = " & ".join(f"\\textbf{{{c}}}" for c in columns) + r" \\"
+
+    body_rows = []
+    for row in stats:
+        name = row[0]
+        cells = [f"\\textbf{{{name}}}"] + [_fmt_sci(v) for v in row[1:n_cols]]
+        body_rows.append(" & ".join(cells) + r" \\")
+    body = "\n\\hline\n".join(body_rows)
+
+    return rf"""
+\begin{{center}}
+\begin{{longtable}}{{{col_spec}}}
+\caption{{{caption}}} \label{{{label}}} \\
+\hline
+{header}
+\hline
+\endfirsthead
+
+\hline
+{header}
+\hline
+\endhead
+
+\hline
+\multicolumn{{{n_cols}}}{{r}}{{\emph{{Continued on next page}}}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+{body}
+\hline
+\end{{longtable}}
+\end{{center}}
+"""
+
+
+def _figure(img_basename, caption, label):
+    return rf"""
+\begin{{figure}}[H]
+    \centering
+    \includegraphics[width=6in]{{{img_basename}}}
+    \caption[{caption}]{{{caption}}}
+    \label{{{label}}}
+\end{{figure}}
+"""
+
+
+def _duration_block(duration_s):
+    return rf"""
+\begin{{center}}
+\begin{{tabular}}{{|C{{2in}}|C{{2in}}|}}
+\hline
+\textbf{{Quantity}} & \textbf{{Value}} \\
+\hline
+Total acquisition time & {duration_s:.3f}~s \\
+\hline
+\end{{tabular}}
+\end{{center}}
+"""
+
+
+def _notes_block(note):
+    if not note:
+        return ""
+    return rf"""
+\subsection*{{Testing Notes}}
+{_tex_escape(note)}
+"""
+
+
+def _section_offset_line(section_offset):
+    if not section_offset:
+        return ""
+    return f"\\setcounter{{section}}{{{int(section_offset)}}}\n"
+
+
+# ---------------------------------------------------------------------------
+# pdflatex driver
+# ---------------------------------------------------------------------------
+
+def _compile_to_pdf(tex_source, out_pdf_path, image_paths):
+    """Compile `tex_source` to `out_pdf_path`.
+
+    Images named by basename in the .tex are copied into the build dir so
+    `\\includegraphics{<basename>}` finds them. The generated `.tex` is also
+    placed next to `out_pdf_path` for debugging.
+    """
+    pdflatex = _find_pdflatex()
+    out_dir = os.path.dirname(os.path.abspath(out_pdf_path))
+    os.makedirs(out_dir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(out_pdf_path))[0]
+
+    with tempfile.TemporaryDirectory(prefix="asio_latex_") as build_dir:
+        tex_path = os.path.join(build_dir, f"{stem}.tex")
+        with open(tex_path, "w") as f:
+            f.write(tex_source)
+
+        for img in image_paths:
+            if img and os.path.exists(img):
+                shutil.copy(img, os.path.join(build_dir, os.path.basename(img)))
+
+        for _ in range(2):
+            result = subprocess.run(
+                [pdflatex, "-interaction=nonstopmode", "-halt-on-error",
+                 f"{stem}.tex"],
+                cwd=build_dir, capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                log = os.path.join(build_dir, f"{stem}.log")
+                tail = ""
+                if os.path.exists(log):
+                    with open(log) as f:
+                        tail = f.read()[-2000:]
+                raise RuntimeError(
+                    f"pdflatex failed for {out_pdf_path}\n"
+                    f"--- stdout tail ---\n{result.stdout[-1500:]}\n"
+                    f"--- log tail ---\n{tail}"
+                )
+
+        built_pdf = os.path.join(build_dir, f"{stem}.pdf")
+        shutil.move(built_pdf, out_pdf_path)
+        # Drop the .tex next to the .pdf for transparency
+        shutil.copy(tex_path, os.path.join(out_dir, f"{stem}.tex"))
+
+
+# ---------------------------------------------------------------------------
+# Body templates
+# ---------------------------------------------------------------------------
+
+STATS_COLS_BASIC = ["Channel", "Mean (fA)", "RMS (fA)", "Std Dev (fA)"]
+STATS_COLS_FULL = ["Channel", "Mean (fA)", "RMS (fA)", "Std Dev (fA)",
+                   "Skew", "Kurtosis"]
+
+
+def _ltv_passfail_table(summary_rows, sensitivity, label):
+    """Render the LTV pass/fail + anomaly summary table.
+
+    `summary_rows` shape: [[channel, verdict, count, t_first, t_last, max_abs_z], ...].
+    """
+    header_cells = ["Channel", "Verdict", "Anomalies",
+                    "$t_{\\mathrm{first}}$ (s)", "$t_{\\mathrm{last}}$ (s)",
+                    "$\\max|z|$"]
+    col_spec = "|C{0.9in}|C{0.7in}|C{0.8in}|C{0.95in}|C{0.95in}|C{0.7in}|"
+    header = " & ".join(f"\\textbf{{{c}}}" for c in header_cells) + r" \\"
+
+    body_rows = []
+    for name, verdict, count, t_first, t_last, max_abs_z in summary_rows:
+        if verdict == "Pass":
+            verdict_cell = r"\textcolor[HTML]{098658}{\textbf{Pass}}"
+        else:
+            verdict_cell = r"\textcolor[HTML]{CD3131}{\textbf{Fail}}"
+        if count:
+            t_first_s = f"{t_first:.2f}"
+            t_last_s = f"{t_last:.2f}"
+            z_s = f"{max_abs_z:.2f}"
+        else:
+            t_first_s = "--"
+            t_last_s = "--"
+            z_s = "--"
+        cells = [f"\\textbf{{{name}}}", verdict_cell, str(int(count)),
+                 t_first_s, t_last_s, z_s]
+        body_rows.append(" & ".join(cells) + r" \\")
+    body = "\n\\hline\n".join(body_rows)
+    caption = (f"LTV pass/fail by channel at sensitivity "
+               f"$|z| > {sensitivity:g}$, computed on the EMI-cleaned + "
+               f"detrended signal.")
+
+    return rf"""
+\begin{{center}}
+\begin{{longtable}}{{{col_spec}}}
+\caption{{{caption}}} \label{{{label}}} \\
+\hline
+{header}
+\hline
+\endfirsthead
+
+\hline
+{header}
+\hline
+\endhead
+
+\hline
+\multicolumn{{6}}{{r}}{{\emph{{Continued on next page}}}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+{body}
+\hline
+\end{{longtable}}
+\end{{center}}
+"""
+
+
+def _intro_paragraph(csv_subtitle, duration_s=None):
+    """First paragraph for every report. Uses `\path{...}` for safe filename wrap."""
+    name = csv_subtitle or "the supplied dataset"
+    duration_clause = (
+        f" The trial spans {duration_s:.2f}~s of continuous data acquisition "
+        f"across all six channels."
+        if duration_s is not None else ""
+    )
+    return (
+        rf"This report summarizes the analysis of dataset \path{{{name}}}."
+        + duration_clause
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public entry points
+# ---------------------------------------------------------------------------
+
+def create_default_report(filename, stats_basic, duration_s, raw_voltages_img,
+                          subtitle=None, note=None, section_offset=0):
+    cap_raw = r"Raw voltage vs.\ time (s) for all six ASIO channels."
+    offset = _section_offset_line(section_offset)
+    intro = _intro_paragraph(subtitle, duration_s)
+    stats_tbl = _stats_longtable(stats_basic, STATS_COLS_BASIC,
+                                 "Raw Current Statistics", "tab:default_stats")
+    fig_raw = _figure(os.path.basename(raw_voltages_img), cap_raw, "fig:default_raw")
+    dur = _duration_block(duration_s)
+    notes = _notes_block(note)
+    body = rf"""
+{offset}
+\section{{ASIO Default Analysis Report}}
+
+{intro}
+Statistics below are raw (no detrending, no EMI filtering); units are femtoamps.
+
+\subsection{{Current Statistics}}
+{stats_tbl}
+
+\subsection{{Raw Voltage Time Series}}
+{fig_raw}
+
+\subsection{{Trial Duration}}
+{dur}
+{notes}
+"""
+    tex = _preamble(subtitle) + "\n\\begin{document}\n" + body + "\n\\end{document}\n"
+    _compile_to_pdf(tex, filename, [raw_voltages_img])
+
+
+def create_background_report(filename, stats_basic, raw_voltages_img,
+                             cleaned_hist_img, subtitle=None, note=None,
+                             section_offset=0):
+    cap_raw = r"Raw voltage vs.\ time (s) for all six ASIO channels."
+    cap_hist = (r"Noise histograms after Savitzky--Golay detrending and "
+                r"40~Hz EMI removal. Red curve is a Gaussian fit using "
+                r"\texttt{scipy.stats.norm}.")
+    offset = _section_offset_line(section_offset)
+    intro = _intro_paragraph(subtitle)
+    stats_tbl = _stats_longtable(stats_basic, STATS_COLS_FULL,
+                                 "Detrended + EMI-filtered Current Statistics",
+                                 "tab:bg_stats")
+    fig_raw = _figure(os.path.basename(raw_voltages_img), cap_raw, "fig:bg_raw")
+    fig_hist = _figure(os.path.basename(cleaned_hist_img), cap_hist, "fig:bg_hist")
+    notes = _notes_block(note)
+    body = rf"""
+{offset}
+\section{{ASIO Background Analysis Report}}
+
+{intro}
+Statistics below are computed after Savitzky--Golay detrending and removal of
+the 40~Hz room-EMI spike. Units are femtoamps.
+
+\subsection{{Current Statistics}}
+{stats_tbl}
+
+\subsection{{Raw Voltage Time Series}}
+{fig_raw}
+
+\subsection{{Noise Histograms}}
+{fig_hist}
+{notes}
+"""
+    tex = _preamble(subtitle) + "\n\\begin{document}\n" + body + "\n\\end{document}\n"
+    _compile_to_pdf(tex, filename, [raw_voltages_img, cleaned_hist_img])
+
+
+def create_fe55_report(filename, stats_basic, raw_voltages_img,
+                       subtitle=None, note=None, section_offset=0):
+    cap_raw = r"Raw voltage vs.\ time (s) for all six ASIO channels."
+    offset = _section_offset_line(section_offset)
+    intro = _intro_paragraph(subtitle)
+    stats_tbl = _stats_longtable(stats_basic, STATS_COLS_BASIC,
+                                 "Raw Current Statistics", "tab:fe55_stats")
+    fig_raw = _figure(os.path.basename(raw_voltages_img), cap_raw, "fig:fe55_raw")
+    notes = _notes_block(note)
+    body = rf"""
+{offset}
+\section{{ASIO Fe-55 Analysis Report}}
+
+{intro}
+Statistics below are raw (no detrending, no EMI filtering); units are femtoamps.
+
+\subsection{{Current Statistics}}
+{stats_tbl}
+
+\subsection{{Expectation Values}}
+\textit{{Fe-55 expectation values: not yet implemented.}}
+
+\subsection{{Raw Voltage Time Series}}
+{fig_raw}
+{notes}
+"""
+    tex = _preamble(subtitle) + "\n\\begin{document}\n" + body + "\n\\end{document}\n"
+    _compile_to_pdf(tex, filename, [raw_voltages_img])
+
+
+def create_ltv_report(filename, ltv_summary, sensitivity, raw_voltages_img,
+                      subtitle=None, note=None, section_offset=0):
+    """Light Tightness Verification report.
+
+    `ltv_summary` is the per-channel summary rows from
+    :func:`asio_analyze.ltv.evaluate_ltv`.
+    """
+    cap_raw = r"Raw voltage vs.\ time (s) for all six ASIO channels."
+    offset = _section_offset_line(section_offset)
+    intro = _intro_paragraph(subtitle)
+    tbl = _ltv_passfail_table(ltv_summary, sensitivity, "tab:ltv_passfail")
+    fig_raw = _figure(os.path.basename(raw_voltages_img), cap_raw, "fig:ltv_raw")
+    notes = _notes_block(note)
+    body = rf"""
+{offset}
+\section{{ASIO Light Tightness Verification Report}}
+
+{intro}
+Each channel is z-scored against its own mean and standard deviation on the
+Savitzky--Golay detrended and 40~Hz EMI-filtered signal. A channel passes
+when no sample exceeds the configured sensitivity threshold; otherwise the
+channel fails and the first/last anomaly timestamps are reported.
+
+\subsection{{Verdicts}}
+{tbl}
+
+\subsection{{Raw Voltage Time Series}}
+{fig_raw}
+{notes}
+"""
+    tex = _preamble(subtitle) + "\n\\begin{document}\n" + body + "\n\\end{document}\n"
+    _compile_to_pdf(tex, filename, [raw_voltages_img])
+
+
+def create_full_report(filename, stats_raw_full, stats_detrended_full,
+                       duration_s, image_paths, subtitle=None, note=None,
+                       section_offset=0, ltv_summary=None, ltv_sensitivity=None):
+    """`image_paths` order: [raw_voltages, fft, cleaned_voltages, cleaned_hist]."""
+    img_raw, img_fft, img_cleaned, img_hist = image_paths
+    cap_raw = r"Raw voltage vs.\ time (s) for all six ASIO channels."
+    cap_fft = "FFTs of raw voltages (mean centered)."
+    cap_cleaned = (r"Voltage vs.\ time (s) after Savitzky--Golay detrending "
+                   r"and 40~Hz EMI removal.")
+    cap_hist = (r"Noise histograms after detrending and 40~Hz EMI removal. "
+                r"Red curve is a Gaussian fit.")
+    offset = _section_offset_line(section_offset)
+    intro = _intro_paragraph(subtitle, duration_s)
+    stats_det = _stats_longtable(stats_detrended_full, STATS_COLS_FULL,
+                                 "Detrended + EMI-filtered Current Statistics",
+                                 "tab:full_det_stats")
+    stats_raw = _stats_longtable(stats_raw_full, STATS_COLS_FULL,
+                                 "Raw Current Statistics", "tab:full_raw_stats")
+    dur = _duration_block(duration_s)
+    fig_raw = _figure(os.path.basename(img_raw), cap_raw, "fig:full_raw")
+    fig_fft = _figure(os.path.basename(img_fft), cap_fft, "fig:full_fft")
+    fig_cleaned = _figure(os.path.basename(img_cleaned), cap_cleaned, "fig:full_cleaned")
+    fig_hist = _figure(os.path.basename(img_hist), cap_hist, "fig:full_hist")
+    if ltv_summary is None or ltv_sensitivity is None:
+        ltv_block = r"\textit{LTV results: not available for this run.}"
+    else:
+        ltv_block = _ltv_passfail_table(ltv_summary, ltv_sensitivity,
+                                        "tab:full_ltv_passfail")
+    notes = _notes_block(note)
+    body = rf"""
+{offset}
+\section{{ASIO Full Analysis Report}}
+
+{intro}
+The remainder of this section reports both raw and detrended + EMI-filtered
+statistics. Units are femtoamps for mean/RMS/std; skew and kurtosis are
+dimensionless.
+
+\subsection{{Detrended + EMI-filtered Statistics}}
+{stats_det}
+
+\subsection{{Raw Statistics}}
+{stats_raw}
+
+\subsection{{Trial Duration}}
+{dur}
+
+\subsection{{Raw Voltage Time Series}}
+{fig_raw}
+
+\subsection{{FFTs of Raw Voltages}}
+{fig_fft}
+
+\subsection{{Detrended + EMI-filtered Time Series}}
+{fig_cleaned}
+
+\subsection{{Noise Histograms}}
+{fig_hist}
+
+\subsection{{LTV (Light Tightness Verification)}}
+{ltv_block}
+
+\subsection{{Fe-55 Expectation Values}}
+\textit{{Fe-55 expectation values: not yet implemented.}}
+{notes}
+"""
+    tex = _preamble(subtitle) + "\n\\begin{document}\n" + body + "\n\\end{document}\n"
+    _compile_to_pdf(tex, filename, image_paths)

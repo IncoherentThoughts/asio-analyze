@@ -1,0 +1,222 @@
+% DOCUMENT TITLE
+% main.tex
+% Template: Jake Davis, Tyler Holliday, Ryan Barna
+% Author:   Sarah Pawlowsk 
+% Created:  January 9 2024
+
+% Initialize
+%------------------------------
+\documentclass[12pt]{article}
+\usepackage[scaled]{helvet}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{ragged2e} % add [document] to set entire document to the text alignment
+\usepackage{float}
+\usepackage{textpos}
+\usepackage{setspace}
+\usepackage{tocloft}
+\usepackage[skip=12pt]{parskip}
+\usepackage{wrapfig}
+\usepackage{xhfill}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage[font={small,it}]{caption}
+\usepackage[autostyle, english = american]{csquotes}
+\usepackage{xcolor,colortbl}
+\usepackage{tcolorbox}
+\usepackage[nopostdot,nogroupskip=true,acronyms,nonumberlist=true]{glossaries}
+\usepackage{pageslts}
+\usepackage{fancyhdr}
+\usepackage{color}
+\usepackage[backend=biber,sorting=none]{biblatex}
+\usepackage{arrayjobx}
+\usepackage{pgffor}
+\usepackage{draftwatermark} %un-comment for DRAFT watermark, see below for other stuff that needs to be un-commented as well
+
+\addbibresource{sections/references.bib}
+
+\renewcommand\familydefault{\sfdefault}
+
+\makenoidxglossaries
+\setglossarystyle{long}
+
+\renewcommand{\glsnamefont}[1]{\textbf{#1}}
+
+\captionsetup{justification=centering,singlelinecheck=false,format=hang} % Centers captions
+
+\geometry{letterpaper, margin=1in} % Sets up the page size and margins
+
+\graphicspath{ {images/} } % Defines the folder to look for images in
+
+\pagenumbering{arabic} % Defines page numbering scheme
+
+\pagestyle{fancyplain}
+\renewcommand\plainheadrulewidth{.4pt}
+\renewcommand\plainfootrulewidth{.4pt}
+
+\renewcommand\arraystretch{1.5}
+
+% TABLE COLUMNS, use C{1in} to define a centered column 1 inch wide.
+%------------------------------
+\newcommand{\PreserveBackslash}[1]{\let\temp=\\#1\let\\=\temp}
+\newcolumntype{C}[1]{>{\PreserveBackslash\centering}p{#1}}
+\newcolumntype{R}[1]{>{\PreserveBackslash\raggedleft}p{#1}}
+\newcolumntype{L}[1]{>{\PreserveBackslash\raggedright}p{#1}}
+%------------------------------
+
+
+% Variables to change depending on the project
+%------------------------------
+\newcommand{\programName}{ASIO}
+\newcommand{\docType}{Engineering Model Test Document}
+\newcommand{\docTitle}{Background Noise Tests}
+\newcommand{\docAbr}{ASIO TEST}
+\newcommand{\docNum}{ASIO-TEST-0022}
+\newcommand{\docDate}{08/26/2025}
+\newcommand{\dateEdit}{08/26/2025}
+\newcommand{\revNum}{0.0}
+
+% signers (can have up to six on a single page)
+\newcommand{\signersCount}{6}
+
+\newcommand{\firstName}{Name One}
+\newcommand{\firstNameTitle}{Title/Role}
+\newcommand{\firstNameOrg}{Institution}
+
+\newcommand{\secondName}{Name Two}
+\newcommand{\secondNameTitle}{Title/Role}
+\newcommand{\secondNameOrg}{Institution}
+
+\newcommand{\thirdName}{Name Three}
+\newcommand{\thirdNameTitle}{Title/Role}
+\newcommand{\thirdNameOrg}{Institution}
+
+\newcommand{\fourthName}{Name Four}
+\newcommand{\fourthNameTitle}{Title/Role}
+\newcommand{\fourthNameOrg}{Institution}
+
+%------------------------------
+
+% ACRONYMS
+%------------------------------
+\newacronym{SSEL}{SSEL}{Space Science and Engineering Laboratory}
+\newacronym{MSU}{MSU}{Montana State University}
+\newacronym{ACY}{ACY}{Acronym}
+\newacronym{ND}{ND}{Neutral Density}
+\newacronym{SXR}{SXR}{Soft X-ray}
+\newacronym{HXR}{HXR}{Hard X-ray}
+\newacronym{EUV}{EUV}{Extreme Ultra Violet}
+\newacronym{FFT}{FFT}{Fast Fourier Transform}
+\newacronym{LM}{LM}{Lockheed Martin}
+\newacronym{SNR}{SNR}{Signal to Noise Ratio}
+\newacronym{EM}{EM}{Engineering Model}
+\newacronym{GSE}{GSE}{Ground Support Equipment}
+\newacronym{CPT}{CPT}{Comprehensive Performance Test}
+\newacronym{ICD}{ICD}{Interface Control Document}
+%------------------------------
+
+\glsunsetall
+
+% WATERMARK, un-comment to add DRAFT watermark to the first page
+%-------------------------------
+\SetWatermarkText{DRAFT}
+\SetWatermarkScale{0.5}
+\SetWatermarkAngle{0}
+\DraftwatermarkOptions{vpos=0.35\paperheight}
+%------------------------------
+
+% BEGIN DOCUMENT
+%------------------------------
+\begin{document}
+    
+    \input{sections/titlepage}
+    \newpage
+
+    %\DraftwatermarkOptions{stamp=false} - Un-comment to only have watermark on the first page (recommended because the watermark does not go over images)
+
+    \newgeometry{top=1.25in,left=1in,right=1in,bottom=1in,headheight=0.8in,headsep=24pt}
+
+    \pagestyle{fancy}
+    \fancyhf{}
+    \fancyhead[L]{\textcolor{gray}{\docAbr} \vspace{6pt}}
+    \fancyhead[C]{\textcolor{gray}{\docNum} \vspace{6pt}}
+    \fancyhead[R]{\textcolor{gray}{\dateEdit} \vspace{6pt}}
+    \fancyfoot[R]{Page: \hspace{6pt} \thepage \hspace{6pt} of \hspace{6pt} \lastpageref{LastPage}}
+    \fancyfoot[L]{\textcolor{gray}{Revision~\revNum}}
+    \renewcommand{\headrulewidth}{0.4pt}
+    \renewcommand{\footrulewidth}{0.4pt}
+
+	\newpage
+
+    % revision log
+    %\section*{Revision Log}
+    %\input{sections/revision_log}
+    %\newpage
+
+    %% Tables %%
+    \setstretch{1.15}
+    \renewcommand{\contentsname}{TABLE OF CONTENTS}
+    \renewcommand{\listfigurename}{LIST OF FIGURES}
+    \renewcommand{\listtablename}{LIST OF TABLES}
+
+    % table of contents
+    \setcounter{table}{0}
+    \tableofcontents\thispagestyle{fancy}
+    \newpage
+
+    % list of figures
+    \listoffigures\thispagestyle{fancy}
+    \vspace*{.35in}
+    
+    % list of tables
+    \listoftables\thispagestyle{fancy}
+
+    % list of acronyms
+    \setlength\LTleft{10pt}
+    \setlength\LTright{0pt}
+    \setlength\glsdescwidth{0.8\hsize}
+    \glsaddall
+    \printnoidxglossary[type=acronym,title=LIST OF ACRONYMS]\thispagestyle{fancy}
+    \newpage
+
+    \setcounter{table}{0}
+    \setcounter{figure}{0}
+
+    \captionsetup{belowskip=0pt}
+    \captionsetup{aboveskip=10pt}
+
+    % setup row counter for step-based table
+    \newcounter{step_num}
+    \newcommand\rownumber{\thesubsection.\stepcounter{step_num}\arabic{step_num}} % if need to include more or less subheadings in the number just add or remove additional 'sub's to \thesubsection (i.e. \thesubsubsection)
+    
+    
+    % INPUT SECTIONS HERE
+    % -------------------------------------------------------------------------------------------------
+    
+    \input{sections/01_Introduction}
+    \input{sections/02_LPT}    
+    \input{sections/03_Background}
+    \input{sections/04_Notes}
+    \input{sections/05_Appendix}
+   
+    %--------------------------------------------------------------------------------------------------
+        
+        
+    % REFERENCES, if no referfences, comment this out.
+    %-------------------------------------------------
+    %\newpage
+    %\section*{References}
+    %\addcontentsline{toc}{section}{References}
+    %\printbibliography[heading=none]
+	%-------------------------------------------------
+
+\end{document}
+%------------------------------
+
