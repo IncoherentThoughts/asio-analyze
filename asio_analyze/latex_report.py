@@ -48,12 +48,16 @@ def _is_analysis_format(file_path):
     that `get_data.dictionary_to_csv` emits. Detected by checking that the
     first column of the first row is one of the canonical channel names."""
     try:
-        with open(file_path, "r") as f:
-            first = f.readline()
+        with open(file_path, "rb") as f:
+            raw = f.read(128)
     except OSError:
         return False
-    if not first:
+    if not raw:
         return False
+    try:
+        first = raw.decode("utf-8").splitlines()[0]
+    except (UnicodeDecodeError, IndexError):
+        return False  # binary file: definitely not the analysis layout
     head = first.split(",", 1)[0].strip()
     return head in _ANALYSIS_CHANNEL_NAMES
 
@@ -366,38 +370,38 @@ STATS_COLS_FULL = ["Channel", "Mean (fA)", "RMS (fA)", "Std Dev (fA)",
                    "Skew", "Kurtosis"]
 
 
-def _ltv_passfail_table(summary_rows, sensitivity, label):
-    """Render the LTV pass/fail + anomaly summary table.
+def _ltv_relative_diff_table(summary_rows, lpt_window, data_window, label):
+    """Render the LPT-vs-DATA per-channel relative-difference table.
 
-    `summary_rows` shape: [[channel, verdict, count, t_first, t_last, max_abs_z], ...].
+    `summary_rows` shape: [[channel, mean_lpt, mean_data, rel_diff], ...].
     """
-    header_cells = ["Channel", "Verdict", "Anomalies",
-                    "$t_{\\mathrm{first}}$ (s)", "$t_{\\mathrm{last}}$ (s)",
-                    "$\\max|z|$"]
-    col_spec = "|C{0.9in}|C{0.7in}|C{0.8in}|C{0.95in}|C{0.95in}|C{0.7in}|"
+    header_cells = [
+        "Channel",
+        r"$\overline{V}_{\mathrm{LPT}}$ (V)",
+        r"$\overline{V}_{\mathrm{DATA}}$ (V)",
+        r"$(\overline{V}_{\mathrm{LPT}} - \overline{V}_{\mathrm{DATA}}) / "
+        r"\overline{V}_{\mathrm{LPT}}$",
+    ]
+    col_spec = "|C{0.9in}|C{1.2in}|C{1.2in}|C{1.6in}|"
     header = " & ".join(f"\\textbf{{{c}}}" for c in header_cells) + r" \\"
 
     body_rows = []
-    for name, verdict, count, t_first, t_last, max_abs_z in summary_rows:
-        if verdict == "Pass":
-            verdict_cell = r"\textcolor[HTML]{098658}{\textbf{Pass}}"
-        else:
-            verdict_cell = r"\textcolor[HTML]{CD3131}{\textbf{Fail}}"
-        if count:
-            t_first_s = f"{t_first:.2f}"
-            t_last_s = f"{t_last:.2f}"
-            z_s = f"{max_abs_z:.2f}"
-        else:
-            t_first_s = "--"
-            t_last_s = "--"
-            z_s = "--"
-        cells = [f"\\textbf{{{name}}}", verdict_cell, str(int(count)),
-                 t_first_s, t_last_s, z_s]
+    for name, mean_lpt, mean_data, rel_diff in summary_rows:
+        cells = [
+            f"\\textbf{{{name}}}",
+            f"{mean_lpt:.4e}",
+            f"{mean_data:.4e}",
+            f"{rel_diff:+.4e}",
+        ]
         body_rows.append(" & ".join(cells) + r" \\")
     body = "\n\\hline\n".join(body_rows)
-    caption = (f"LTV pass/fail by channel at sensitivity "
-               f"$|z| > {sensitivity:g}$, computed on the EMI-cleaned + "
-               f"detrended signal.")
+    lpt_t0, lpt_t1 = lpt_window
+    data_t0, data_t1 = data_window
+    caption = (
+        f"Per-channel relative difference between the LPT reference "
+        f"segment $[{lpt_t0:.2f},\\,{lpt_t1:.2f}]$~s and the DATA segment "
+        f"$[{data_t0:.2f},\\,{data_t1:.2f}]$~s."
+    )
 
     return rf"""
 \begin{{center}}
@@ -414,7 +418,7 @@ def _ltv_passfail_table(summary_rows, sensitivity, label):
 \endhead
 
 \hline
-\multicolumn{{6}}{{r}}{{\emph{{Continued on next page}}}} \\
+\multicolumn{{4}}{{r}}{{\emph{{Continued on next page}}}} \\
 \endfoot
 
 \hline
@@ -543,30 +547,37 @@ Statistics below are raw (no detrending, no EMI filtering); units are femtoamps.
     _compile_to_pdf(tex, filename, [raw_voltages_img])
 
 
-def create_ltv_report(filename, ltv_summary, sensitivity, raw_voltages_img,
-                      subtitle=None, note=None, section_offset=0):
+def create_ltv_report(filename, ltv_summary, lpt_window, data_window,
+                      raw_voltages_img, subtitle=None, note=None,
+                      section_offset=0):
     """Light Tightness Verification report.
 
     `ltv_summary` is the per-channel summary rows from
-    :func:`asio_analyze.ltv.evaluate_ltv`.
+    :func:`asio_analyze.ltv.evaluate_ltv`. `lpt_window` and `data_window`
+    are ``(t0, t1)`` tuples in seconds for the reference and tested segments.
     """
     cap_raw = r"Raw voltage vs.\ time (s) for all six ASIO channels."
     offset = _section_offset_line(section_offset)
     intro = _intro_paragraph(subtitle)
-    tbl = _ltv_passfail_table(ltv_summary, sensitivity, "tab:ltv_passfail")
+    tbl = _ltv_relative_diff_table(ltv_summary, lpt_window, data_window,
+                                   "tab:ltv_relative_diff")
     fig_raw = _figure(os.path.basename(raw_voltages_img), cap_raw, "fig:ltv_raw")
     notes = _notes_block(note)
+    lpt_t0, lpt_t1 = lpt_window
+    data_t0, data_t1 = data_window
     body = rf"""
 {offset}
 \section{{ASIO Light Tightness Verification Report}}
 
 {intro}
-Each channel is z-scored against its own mean and standard deviation on the
-Savitzky--Golay detrended and 40~Hz EMI-filtered signal. A channel passes
-when no sample exceeds the configured sensitivity threshold; otherwise the
-channel fails and the first/last anomaly timestamps are reported.
+A reference (LPT) segment spanning $[{lpt_t0:.2f},\,{lpt_t1:.2f}]$~s is
+compared against a later DATA segment spanning $[{data_t0:.2f},\,{data_t1:.2f}]$~s
+from the same dataset. For each channel the table below reports the mean
+voltage of each segment and the relative difference,
+$(\overline{{V}}_{{\mathrm{{LPT}}}} - \overline{{V}}_{{\mathrm{{DATA}}}}) /
+\overline{{V}}_{{\mathrm{{LPT}}}}$.
 
-\subsection{{Verdicts}}
+\subsection{{Relative Differences}}
 {tbl}
 
 \subsection{{Raw Voltage Time Series}}
@@ -579,7 +590,7 @@ channel fails and the first/last anomaly timestamps are reported.
 
 def create_full_report(filename, stats_raw_full, stats_detrended_full,
                        duration_s, image_paths, subtitle=None, note=None,
-                       section_offset=0, ltv_summary=None, ltv_sensitivity=None):
+                       section_offset=0):
     """`image_paths` order: [raw_voltages, fft, cleaned_voltages, cleaned_hist]."""
     img_raw, img_fft, img_cleaned, img_hist = image_paths
     cap_raw = r"Raw voltage vs.\ time (s) for all six ASIO channels."
@@ -600,11 +611,6 @@ def create_full_report(filename, stats_raw_full, stats_detrended_full,
     fig_fft = _figure(os.path.basename(img_fft), cap_fft, "fig:full_fft")
     fig_cleaned = _figure(os.path.basename(img_cleaned), cap_cleaned, "fig:full_cleaned")
     fig_hist = _figure(os.path.basename(img_hist), cap_hist, "fig:full_hist")
-    if ltv_summary is None or ltv_sensitivity is None:
-        ltv_block = r"\textit{LTV results: not available for this run.}"
-    else:
-        ltv_block = _ltv_passfail_table(ltv_summary, ltv_sensitivity,
-                                        "tab:full_ltv_passfail")
     notes = _notes_block(note)
     body = rf"""
 {offset}
@@ -635,9 +641,6 @@ dimensionless.
 
 \subsection{{Noise Histograms}}
 {fig_hist}
-
-\subsection{{LTV (Light Tightness Verification)}}
-{ltv_block}
 
 \subsection{{Fe-55 Expectation Values}}
 \textit{{Fe-55 expectation values: not yet implemented.}}

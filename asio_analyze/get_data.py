@@ -1,95 +1,227 @@
-import numpy as np
+"""ASIO binary parser.
+
+Ported from ``flipsample.ipynb`` (the canonical, ICD-correct implementation).
+
+ICD §5.1: 950-byte little-endian packet.
+
+  Offset  Size  Field
+  ------  ----  -----------------------------------------------------
+  0       4     Start ID "ASIO"
+  4       1     Relay Configuration (bit layout LSB->MSB):
+                  EUV5, EUV6, EUV7, HXR8, HXR9, HXR10, HXR11, Unused
+  5       10    Temperature Data (5 sensors x 2 bytes, 16-bit LE)
+  15      1     Bad Command Count
+  16      1     Padded Zero
+  17      2     Voltage Data (16-bit LE)
+  19      2     Current Data (16-bit LE)
+  21      2     Packet Count (16-bit LE)
+  23      1     Command Count
+  24      6     MUSE Time (4 bytes seconds + 2 bytes sub-seconds, LE)
+  30      2     Padded Zeros
+  32      4     ASIO Time ms (32-bit LE)
+  36      4     First Data Point ASIO Time ms (32-bit LE)
+  40      4     Padded Zeros
+  44      900   ADC Data (50 segments x 18 bytes = 50 segments x 6 channels x 3 bytes)
+  944     4     End ID "STOP"
+  948     2     CRC
+
+Each channel sample is a 24-bit little-endian unsigned integer; ``ADC_to_V``
+maps it to a voltage in [0, 5).
+"""
+
 import csv
+
+import numpy as np
 import pandas as pd
-import os
+from numpy.lib.stride_tricks import sliding_window_view
+
+
+PACKET_SIZE = 950
+HEADER_SIZE = 44
+ADC_SEGMENT_BYTES = 18           # 6 channels * 3 bytes
+N_SEGMENTS = 50                  # ADC segments per packet
+ADC_DATA_SIZE = N_SEGMENTS * ADC_SEGMENT_BYTES   # 900 bytes
+STOP_OFFSET = HEADER_SIZE + ADC_DATA_SIZE        # 944
+SAMPLE_DT = 0.01                 # seconds per ADC sample (10 ms)
+
+CHANNEL_NAMES = ("SXR1", "SXR2", "SXR3", "SXR4", "HXR", "EUV")
+
+
+# ---------------------------------------------------------------------------
+# Byte helpers
+# ---------------------------------------------------------------------------
 
 def ADC_to_V(val):
-    if val > 0x7FFFFF:
-        V = (val-(0xFFFFFF+1))/0x800000*2.5 + 2.5
-    else:
-        V = (val) /0x800000 * 2.5 +2.5
-        
-    return V
+    """Convert a 24-bit ADC integer to a voltage.
+
+    Two's-complement upper half maps to negative offset around 2.5 V midpoint.
+    Works on Python ints or numpy arrays (vectorized via np.where).
+    """
+    arr = np.asarray(val).astype(np.float64)
+    high = arr > 0x7FFFFF
+    pos = arr / 0x800000 * 2.5 + 2.5
+    neg = (arr - (0xFFFFFF + 1)) / 0x800000 * 2.5 + 2.5
+    return np.where(high, neg, pos)
+
+
+def _decode16le(buf):
+    return int(buf[0]) | (int(buf[1]) << 8)
+
+
+def _decode32le(buf):
+    return (
+        int(buf[0])
+        | (int(buf[1]) << 8)
+        | (int(buf[2]) << 16)
+        | (int(buf[3]) << 24)
+    )
+
+
+def _find_bytes(target, data):
+    """Indices where the byte string ``target`` begins in ``data``."""
+    target_bytes = np.frombuffer(target.encode(), dtype=np.uint8)
+    if len(data) < len(target_bytes):
+        return np.array([], dtype=int)
+    windows = sliding_window_view(data, len(target_bytes))
+    matches = (windows == target_bytes).all(axis=1)
+    return np.where(matches)[0]
+
+
+# ---------------------------------------------------------------------------
+# Loading
+# ---------------------------------------------------------------------------
+
+def _load_raw_bytes(path):
+    """Read the file as a uint8 array.
+
+    Supports two on-disk formats:
+      - Raw binary file (preferred; what the GSE writes today). Read via
+        ``np.fromfile``.
+      - Legacy CSV-of-bytes (a single row of comma-separated integers, one
+        per byte). Detected by reading the first kilobyte and checking for
+        ASCII digits/commas.
+    """
+    with open(path, "rb") as f:
+        head = f.read(64)
+    # Legacy CSV-of-bytes format: ASCII digits/commas only; never contains the
+    # raw "ASIO" framing string.
+    allowed = set(b"0123456789,-\r\n\t .")
+    looks_like_csv = bool(head) and all(b in allowed for b in head)
+    if looks_like_csv:
+        with open(path, "r") as f:
+            row = next(csv.reader(f))
+        return np.array(row, dtype=int).astype(np.uint8)
+    return np.fromfile(path, dtype=np.uint8)
+
+
+def _collect_packets(raw):
+    """Return a list of 950-byte uint8 packets validated by ASIO/STOP framing."""
+    packets = []
+    rejected = 0
+    asio_indices = _find_bytes("ASIO", raw)
+    for start in asio_indices:
+        end = start + PACKET_SIZE
+        if end > len(raw):
+            rejected += 1
+            continue
+        stop_check = raw[start + STOP_OFFSET : start + STOP_OFFSET + 4].tobytes()
+        if stop_check != b"STOP":
+            rejected += 1
+            continue
+        packets.append(raw[start:end])
+    if rejected:
+        print(f"Skipped {rejected} malformed packet(s); kept {len(packets)}")
+    return packets
+
+
+# ---------------------------------------------------------------------------
+# Per-packet parsing
+# ---------------------------------------------------------------------------
+
+def _parse_header(packet):
+    relay = int(packet[4])
+    temps = [_decode16le(packet[5 + i * 2 : 7 + i * 2]) for i in range(5)]
+    return {
+        "relay": relay,
+        "temps_raw": temps,
+        "bad_cmd_count": int(packet[15]),
+        "voltage_raw": _decode16le(packet[17:19]),
+        "current_raw": _decode16le(packet[19:21]),
+        "packet_count": _decode16le(packet[21:23]),
+        "cmd_count": int(packet[23]),
+        "muse_sec": _decode32le(packet[24:28]),
+        "muse_subsec": _decode16le(packet[28:30]),
+        "asio_time_ms": _decode32le(packet[32:36]),
+        "first_dp_ms": _decode32le(packet[36:40]),
+    }
+
+
+def _decode_adc(packets):
+    """Decode all ADC samples for every channel.
+
+    Returns a dict mapping channel name -> np.ndarray of voltages (float),
+    length = n_packets * N_SEGMENTS.
+    """
+    n = len(packets)
+    if n == 0:
+        return {name: np.zeros(0, dtype=float) for name in CHANNEL_NAMES}
+
+    block = np.stack([
+        np.frombuffer(p[HEADER_SIZE : HEADER_SIZE + ADC_DATA_SIZE].tobytes(),
+                      dtype=np.uint8)
+        for p in packets
+    ])
+    block = block.reshape(n, N_SEGMENTS, 6, 3)
+    adc = (
+        block[..., 0].astype(np.uint32)
+        | (block[..., 1].astype(np.uint32) << 8)
+        | (block[..., 2].astype(np.uint32) << 16)
+    )
+    # adc shape: (n_packets, N_SEGMENTS, 6) -> per-channel flat voltage arrays
+    out = {}
+    for ch_idx, name in enumerate(CHANNEL_NAMES):
+        out[name] = ADC_to_V(adc[..., ch_idx]).ravel().astype(float)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def get_data_dict(file):
-    #Open .csv file
-    open_file = csv.reader(open(file))
-    raw_arr = np.array(list(open_file)[0], dtype=int)
-    
-    # Find each header
-    ind = np.array([], dtype=int)  #index array of headers, specifically the 'A' in 'ASIO'
-    for i in np.where( raw_arr==65 )[0]:  #find 'A'
-        if raw_arr[i+1]==83:  #is 'S' next?
-            if raw_arr[i+2]==73:  #is 'I' next?
-                if raw_arr[i+3]==79:  #is 'O' next?
-                    ind = np.append(ind, i)  #if so, save index for header 'ASIO'
-    
-    # Seperate each packet
-    packet_arr = np.zeros(950)  #pack zeros for np.vstack
-    for i in ind:
-        packet = raw_arr[i:i+950]
-        if len(packet) == 950:
-            packet_arr = np.vstack(( packet_arr, packet ))
-        else:
-            print(f'Packet removed. Insufficient Packet Size at array[{i}]. Needs 950 Bytes, received {len(packet)}.')
-    packet_arr = packet_arr[1:].astype(int)
-    
-    # Seperate Data
-    headers = packet_arr[:,:4]            #header remained the same from old to new
-    #health_A = packet_arr[:,4:32]        #this was the old packet structure (not flight code)
-    health_A = packet_arr[:,4:44]         #new packet structure, flight code
-    #data_arr = packet_arr[:,32:932]      #this was the old packet structure (not flight code)
-    data_arr = packet_arr[:,44:944]       #new packet structure, flight code
-    #health_B = packet_arr[:,932:]        #this was the old packet structure (not flight code)
-    health_B = packet_arr[:,944:]         #new_packet structure, flight code
+    """Parse an ASIO capture (binary or legacy CSV) into a structured dict.
 
-    # Rearrange bytes into measurements
+    Returned keys:
+      SXR1, SXR2, SXR3, SXR4, HXR, EUV : np.ndarray(float)  voltages, length
+                                                            n_packets * 50
+      headers                 : list[dict]  per-packet housekeeping
+                                (MUSE/ASIO times needed for .rpt segment mapping)
+      n_packets               : int
+      samples_per_packet      : 50
+      dt                      : 0.01    (seconds per ADC sample)
+    """
+    raw = _load_raw_bytes(file)
+    packets = _collect_packets(raw)
+    if not packets:
+        raise ValueError(f"No valid ASIO packets found in {file!r}")
 
-    bytes_arr = np.reshape(data_arr, (len(headers), 300, 3))
+    channels = _decode_adc(packets)
+    headers = [_parse_header(p) for p in packets]
 
-    # Seperate each channel
-    channels_arr = np.stack((bytes_arr[:,0::6,:], 
-                             bytes_arr[:,1::6,:], 
-                             bytes_arr[:,2::6,:], 
-                             bytes_arr[:,3::6,:], 
-                             bytes_arr[:,4::6,:], 
-                             bytes_arr[:,5::6,:]))
-    # Print statement to check the MSB of each voltage value in each channel
-    #ind = np.array([])
-    #for i in channels_arr[:,:,:,0].flatten():
-        #if i != 128:
-            #ind = np.append(ind, i)
-    #print(ind)
+    out = dict(channels)
+    out.update({
+        "headers": headers,
+        "n_packets": len(packets),
+        "samples_per_packet": N_SEGMENTS,
+        "dt": SAMPLE_DT,
+    })
+    return out
 
-    # Combine bytes for each measurement
-    ADC_arr = ((2**16) * channels_arr[:,:,:,2] +
-               (2**8) * channels_arr[:,:,:,1] + 
-               (2**0) * channels_arr[:,:,:,0])
-    # Convert bytes into voltages
-    V_arr = np.vectorize(ADC_to_V)(ADC_arr)
 
-    # Build Data dictionary
-    data_dict = {}
-    data_dict['SXR1'] = V_arr[0].flatten()
-    data_dict['SXR2'] = V_arr[1].flatten()
-    data_dict['SXR3'] = V_arr[2].flatten()
-    data_dict['SXR4'] = V_arr[3].flatten()
-    data_dict['HXR'] = V_arr[4].flatten()
-    data_dict['EUV'] = V_arr[5].flatten()
-    data_dict['Health1'] = health_A
-    data_dict['Health2'] = health_B
-
-    return data_dict
-
-#converts dictionary to a csv titled output.csv excluding Health1 and Health2 keys
-def dictionary_to_csv(data_dict, filename = 'output.csv'):
-    exclude_keys = {'Health1', 'Health2'}
-    filtered_dictionary = {k: v for k, v in data_dict.items() if k not in exclude_keys}
-    df = pd.DataFrame.from_dict(filtered_dictionary)
-    df = df.T
-    df.to_csv(filename, header = None)
-    print(f'Saved {filename}')
-
-#test call
-#get_data_dict("../../Data/06_EM_Testing_V2_DB_Training/Test_data/ASIO-2025_09_15-11_48_26_AM-test4.csv")
-
+# Channel-name-first CSV layout consumed downstream by ``latex_report._prepare_analysis_csv``.
+def dictionary_to_csv(data_dict, filename="output.csv"):
+    """Write the 6 voltage channels (only) to a CSV in channel-row layout."""
+    filtered = {k: data_dict[k] for k in CHANNEL_NAMES if k in data_dict}
+    df = pd.DataFrame.from_dict(filtered).T
+    df.to_csv(filename, header=None)
+    print(f"Saved {filename}")

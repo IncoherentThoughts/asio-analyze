@@ -25,4 +25,4 @@ asio-gui = "asio_analyze.gui:main"
 include = ["asio_analyze*"]
 
 [tool.setuptools.package-data]
-asio_analyze = ["expectation_values/*"]
+asio_analyze = ["expectation_values/*", "ASIO_logo.svg"]

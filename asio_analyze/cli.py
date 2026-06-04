@@ -26,9 +26,6 @@ MENU = [
 ]
 
 
-LTV_DEFAULT_SENSITIVITY = 4.0
-
-
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
@@ -75,7 +72,7 @@ def _build_parser():
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="command")
 
-    def add_dir_subparser(name, help_text, with_pdf_flag=False, with_sensitivity=False):
+    def add_dir_subparser(name, help_text, with_pdf_flag=False, with_ltv_windows=False):
         sp = sub.add_parser(name, help=help_text)
         sp.add_argument("directory", help="Path to a CSV file OR a directory containing ASIO CSV files")
         sp.add_argument("--note", default=None,
@@ -89,20 +86,22 @@ def _build_parser():
         if with_pdf_flag:
             sp.add_argument("--pdf", action="store_true",
                             help="Also emit a PDF report (default: CSV only)")
-        if with_sensitivity:
-            sp.add_argument("--sensitivity", type=float,
-                            default=LTV_DEFAULT_SENSITIVITY,
-                            help=f"LTV z-score threshold; samples with |z| above "
-                                 f"this count as anomalies "
-                                 f"(default: {LTV_DEFAULT_SENSITIVITY})")
+        if with_ltv_windows:
+            sp.add_argument("--lpt-start", type=float, required=True,
+                            help="LPT reference segment start time (seconds)")
+            sp.add_argument("--lpt-end", type=float, required=True,
+                            help="LPT reference segment end time (seconds)")
+            sp.add_argument("--data-start", type=float, required=True,
+                            help="DATA (tested) segment start time (seconds)")
+            sp.add_argument("--data-end", type=float, required=True,
+                            help="DATA (tested) segment end time (seconds)")
         return sp
 
     add_dir_subparser("background", "Background test analysis")
     add_dir_subparser("ltv",        "Light Tightness Verification",
-                      with_sensitivity=True)
+                      with_ltv_windows=True)
     add_dir_subparser("fe55",       "Fe-55 test analysis")
-    add_dir_subparser("full",       "Full report (all sections)",
-                      with_sensitivity=True)
+    add_dir_subparser("full",       "Full report (all sections)")
 
     return p
 
@@ -116,9 +115,9 @@ def _args_to_params(args):
     }
     if args.command == "default":
         params["emit_pdf"] = getattr(args, "pdf", False)
-    if args.command in ("ltv", "full"):
-        params["sensitivity"] = getattr(args, "sensitivity",
-                                        LTV_DEFAULT_SENSITIVITY)
+    if args.command == "ltv":
+        params["lpt_window"] = (args.lpt_start, args.lpt_end)
+        params["data_window"] = (args.data_start, args.data_end)
     return params
 
 
@@ -203,15 +202,22 @@ def _wizard_dir_command(name):
     params = {"directory": directory, "note": note, "output_dir": output_dir}
     if name == "default":
         params["emit_pdf"] = _prompt_yes_no("Also emit a PDF?", default=False)
-    if name in ("ltv", "full"):
-        while True:
-            raw = _prompt("LTV sensitivity (z-score threshold)",
-                          default=str(LTV_DEFAULT_SENSITIVITY))
-            try:
-                params["sensitivity"] = float(raw)
-                break
-            except ValueError:
-                print(f"  '{raw}' is not a valid number.")
+    if name == "ltv":
+        def prompt_float(label):
+            while True:
+                raw = _prompt(label)
+                try:
+                    return float(raw)
+                except ValueError:
+                    print(f"  '{raw}' is not a valid number.")
+        print("\n  LTV compares an earlier LPT reference segment to a later "
+              "DATA segment.")
+        lpt_t0 = prompt_float("LPT segment start (s)")
+        lpt_t1 = prompt_float("LPT segment end   (s)")
+        data_t0 = prompt_float("DATA segment start (s)")
+        data_t1 = prompt_float("DATA segment end   (s)")
+        params["lpt_window"] = (lpt_t0, lpt_t1)
+        params["data_window"] = (data_t0, data_t1)
     return params
 
 

@@ -26,9 +26,8 @@ from . import latex_report as report_module
 from .latex_report import _prepare_analysis_csv
 
 
-LTV_DEFAULT_SENSITIVITY = 4.0
-LTV_STATS_COLS = ['channel', 'pass_fail', 'anomaly_count',
-                  't_first_s', 't_last_s', 'max_abs_z']
+LTV_STATS_COLS = ['channel', 'mean_LPT_V', 'mean_DATA_V', 'relative_difference']
+LTV_SAMPLE_DT_S = 0.01  # ASIO sampling period; matches get_data.SAMPLE_DT
 
 
 # ---------------------------------------------------------------------------
@@ -233,35 +232,59 @@ def cmd_background(directory, output_dir=None, note=None, emit_pdf=True,
 # ---------------------------------------------------------------------------
 
 def _write_ltv_stats_csv(path, summary_rows):
-    """Write LTV summary CSV. Numeric anomaly time/z columns are blank when
-    the channel passed (no anomalies)."""
+    """Write LTV LPT-vs-DATA per-channel relative-difference CSV."""
     with open(path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(LTV_STATS_COLS)
-        for name, verdict, count, t_first, t_last, max_abs_z in summary_rows:
-            if count:
-                row = [name, verdict, count,
-                       f"{t_first:.6f}", f"{t_last:.6f}", f"{max_abs_z:.6f}"]
-            else:
-                row = [name, verdict, 0, "", "", ""]
-            writer.writerow(row)
+        for name, mean_lpt, mean_data, rel_diff in summary_rows:
+            writer.writerow([
+                name,
+                f"{mean_lpt:.10e}",
+                f"{mean_data:.10e}",
+                f"{rel_diff:.10e}",
+            ])
     print(f"Wrote {path}")
 
 
-def cmd_ltv(directory, output_dir=None, note=None, emit_pdf=True,
-            section_offset=0, sensitivity=LTV_DEFAULT_SENSITIVITY, **_):
+def _slice_segment(df, t0, t1, dt=LTV_SAMPLE_DT_S):
+    """Slice the (6 channels x N samples) voltage frame into an (N_seg, 6)
+    array covering the closed-open time window ``[t0, t1)`` in seconds."""
+    i0 = max(0, int(round(t0 / dt)))
+    i1 = min(df.shape[1], int(round(t1 / dt)))
+    if i1 <= i0:
+        raise ValueError(
+            f"empty segment slice: t0={t0:.3f}s, t1={t1:.3f}s -> [{i0}, {i1})"
+        )
+    return df.iloc[:, i0:i1].to_numpy().T  # (N_seg, 6)
+
+
+def cmd_ltv(directory, lpt_window, data_window, output_dir=None, note=None,
+            emit_pdf=True, section_offset=0, **_):
+    """Light Tightness Verification: compare an LPT reference segment to a
+    later DATA segment from the same file.
+
+    ``lpt_window`` and ``data_window`` are ``(t0, t1)`` tuples in seconds.
+    """
     csv_files, anchor_dir, analysis_dir = _setup_run(directory, output_dir)
+
+    lpt_t0, lpt_t1 = float(lpt_window[0]), float(lpt_window[1])
+    data_t0, data_t1 = float(data_window[0]), float(data_window[1])
+    if data_t0 < lpt_t1:
+        print(f"[ltv] warning: DATA segment starts at {data_t0:.2f}s, "
+              f"before LPT ends at {lpt_t1:.2f}s")
 
     for csv_file in csv_files:
         base = os.path.splitext(os.path.basename(csv_file))[0]
-        print(f"\n[ltv] processing {csv_file} (sensitivity={sensitivity}) ...")
+        print(f"\n[ltv] processing {csv_file} "
+              f"(LPT={lpt_t0:.2f}-{lpt_t1:.2f}s, "
+              f"DATA={data_t0:.2f}-{data_t1:.2f}s) ...")
         try:
             analysis_csv = _prepare_analysis_csv(csv_file)
-            cleaned_df, _rms = noise_analysis.remove_room_emi(analysis_csv)
-            passfail, summary = ltv_module.evaluate_ltv_from_cleaned(
-                cleaned_df, sensitivity,
-            )
-            print(f"  verdict: {passfail}")
+            voltages = _voltages_df(analysis_csv)
+            lpt_arr = _slice_segment(voltages, lpt_t0, lpt_t1)
+            data_arr = _slice_segment(voltages, data_t0, data_t1)
+            results, summary = ltv_module.evaluate_ltv(lpt_arr, data_arr)
+            print(f"  relative differences: {results}")
 
             stats_path = os.path.join(analysis_dir, f"{base}_ltv_stats.csv")
             _write_ltv_stats_csv(stats_path, summary)
@@ -273,7 +296,9 @@ def cmd_ltv(directory, output_dir=None, note=None, emit_pdf=True,
             if emit_pdf:
                 pdf_path = os.path.join(analysis_dir, f"PDF_ltv_{base}.pdf")
                 report_module.create_ltv_report(
-                    pdf_path, summary, sensitivity, raw_img,
+                    pdf_path, summary,
+                    (lpt_t0, lpt_t1), (data_t0, data_t1),
+                    raw_img,
                     subtitle=os.path.basename(csv_file), note=note,
                     section_offset=section_offset,
                 )
@@ -331,7 +356,7 @@ def cmd_fe55(directory, output_dir=None, note=None, emit_pdf=True,
 # ---------------------------------------------------------------------------
 
 def cmd_full(directory, output_dir=None, note=None, emit_pdf=True,
-             section_offset=0, sensitivity=LTV_DEFAULT_SENSITIVITY, **_):
+             section_offset=0, **_):
     csv_files, anchor_dir, analysis_dir = _setup_run(directory, output_dir)
 
     for csv_file in csv_files:
@@ -363,13 +388,6 @@ def cmd_full(directory, output_dir=None, note=None, emit_pdf=True,
             img_cleaned = noise_analysis.plot_cleaned_signals_time_series(cleaned_df, analysis_csv)
             img_hist = noise_analysis.plot_cleaned_histogram(cleaned_df, analysis_csv)
 
-            # Real LTV on the already-cleaned signal; fe55 expectation values still a stub.
-            ltv_passfail, ltv_summary = ltv_module.evaluate_ltv_from_cleaned(
-                cleaned_df, sensitivity,
-            )
-            print(f"[full] LTV (sensitivity={sensitivity}): {ltv_passfail}")
-            ltv_stats_path = os.path.join(analysis_dir, f"{base}_full_ltv_stats.csv")
-            _write_ltv_stats_csv(ltv_stats_path, ltv_summary)
             fe55_module.expectation_values(analysis_csv)
 
             if emit_pdf:
@@ -379,8 +397,6 @@ def cmd_full(directory, output_dir=None, note=None, emit_pdf=True,
                     [img_raw, img_fft, img_cleaned, img_hist],
                     subtitle=os.path.basename(csv_file), note=note,
                     section_offset=section_offset,
-                    ltv_summary=ltv_summary,
-                    ltv_sensitivity=sensitivity,
                 )
                 print(f"Wrote {pdf_path}")
         except Exception as e:
