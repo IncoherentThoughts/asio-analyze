@@ -1,0 +1,176 @@
+\documentclass[12pt]{article}
+\usepackage[scaled]{helvet}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{ragged2e}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage[skip=12pt]{parskip}
+\usepackage{enumitem}
+\usepackage[font={small,it}]{caption}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{underscore}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor,colortbl}
+\usepackage{fancyhdr}
+
+\renewcommand\familydefault{\sfdefault}
+\captionsetup{justification=centering,singlelinecheck=false,format=hang}
+\geometry{letterpaper, margin=1in}
+\graphicspath{ {./} }
+\pagenumbering{arabic}
+\renewcommand\arraystretch{1.5}
+\setlength\LTleft\fill
+\setlength\LTright\fill
+
+\newcommand{\PreserveBackslash}[1]{\let\temp=\\#1\let\\=\temp}
+\newcolumntype{C}[1]{>{\PreserveBackslash\centering}p{#1}}
+\newcolumntype{R}[1]{>{\PreserveBackslash\raggedleft}p{#1}}
+\newcolumntype{L}[1]{>{\PreserveBackslash\raggedright}p{#1}}
+
+\newcommand{\docAbr}{ASIO ANALYSIS}
+\newcommand{\docNum}{ASIO-ANALYSIS-20260604}
+\newcommand{\dateEdit}{06/05/2026}
+\newcommand{\revNum}{0.0}
+
+\newgeometry{top=1.25in,left=1in,right=1in,bottom=1in,headheight=0.8in,headsep=24pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{gray}{\docAbr} \vspace{6pt}}
+\fancyhead[C]{\textcolor{gray}{\docNum} \vspace{6pt}}
+\fancyhead[R]{\textcolor{gray}{\dateEdit} \vspace{6pt}}
+\fancyfoot[R]{Page: \hspace{6pt} \thepage}
+\fancyfoot[L]{\textcolor{gray}{Revision~\revNum}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\captionsetup{belowskip=0pt}
+\captionsetup{aboveskip=10pt}
+
+\begin{document}
+
+
+\section{ASIO Full Analysis Report}
+
+This report summarizes the analysis of dataset \path{20260604.0x02B4}. The trial spans 2256.49~s of continuous data acquisition across all six channels.
+The remainder of this section reports both raw and detrended + EMI-filtered
+statistics. Units are femtoamps for mean/RMS/std; skew and kurtosis are
+dimensionless.
+
+\subsection{Detrended + EMI-filtered Statistics}
+
+\begin{table}[H]
+\centering
+\caption{Detrended + EMI-filtered Current Statistics} \label{tab:full_det_stats}
+\begin{tabular}{|C{0.9in}|C{1.08in}|C{1.08in}|C{1.08in}|C{1.08in}|C{1.08in}|}
+\hline
+\textbf{Channel} & \textbf{Mean (fA)} & \textbf{RMS (fA)} & \textbf{Std Dev (fA)} & \textbf{Skew} & \textbf{Kurtosis} \\
+\hline
+\textbf{SXR1} & $1.3329 \times 10^{-16}$ & $4.6884 \times 10^{1}$ & $4.6884 \times 10^{1}$ & $-1.9938 \times 10^{-3}$ & $8.9090 \times 10^{-2}$ \\
+\hline
+\textbf{SXR2} & $7.1697 \times 10^{-16}$ & $4.6863 \times 10^{1}$ & $4.6863 \times 10^{1}$ & $3.3327 \times 10^{-2}$ & $1.4417 \times 10^{-2}$ \\
+\hline
+\textbf{SXR3} & $4.8249 \times 10^{-16}$ & $5.3991 \times 10^{2}$ & $5.3991 \times 10^{2}$ & $3.8089 \times 10^{2}$ & $1.6054 \times 10^{5}$ \\
+\hline
+\textbf{SXR4} & $4.7961 \times 10^{-16}$ & $4.4730 \times 10^{1}$ & $4.4730 \times 10^{1}$ & $1.2535 \times 10^{-1}$ & $2.1595 \times 10^{-2}$ \\
+\hline
+\textbf{HXR} & $2.1851 \times 10^{-14}$ & $7.8835 \times 10^{2}$ & $7.8835 \times 10^{2}$ & $1.4741 \times 10^{-2}$ & $4.6225 \times 10^{-2}$ \\
+\hline
+\textbf{EUV} & $-1.5888 \times 10^{-14}$ & $7.2072 \times 10^{2}$ & $7.2072 \times 10^{2}$ & $5.7140 \times 10^{-3}$ & $5.0090 \times 10^{-2}$ \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\subsection{Raw Statistics}
+
+\begin{table}[H]
+\centering
+\caption{Raw Current Statistics} \label{tab:full_raw_stats}
+\begin{tabular}{|C{0.9in}|C{1.08in}|C{1.08in}|C{1.08in}|C{1.08in}|C{1.08in}|}
+\hline
+\textbf{Channel} & \textbf{Mean (fA)} & \textbf{RMS (fA)} & \textbf{Std Dev (fA)} & \textbf{Skew} & \textbf{Kurtosis} \\
+\hline
+\textbf{SXR1} & $5.2328 \times 10^{4}$ & $5.2328 \times 10^{4}$ & $6.9331 \times 10^{1}$ & $-1.2443 \times 10^{-1}$ & $-1.3340 \times 10^{-1}$ \\
+\hline
+\textbf{SXR2} & $5.4434 \times 10^{4}$ & $5.4434 \times 10^{4}$ & $5.4695 \times 10^{1}$ & $-1.4859 \times 10^{-2}$ & $-1.8411 \times 10^{-2}$ \\
+\hline
+\textbf{SXR3} & $5.5039 \times 10^{4}$ & $5.5042 \times 10^{4}$ & $5.5832 \times 10^{2}$ & $4.0437 \times 10^{2}$ & $1.7360 \times 10^{5}$ \\
+\hline
+\textbf{SXR4} & $5.2913 \times 10^{4}$ & $5.2913 \times 10^{4}$ & $6.0599 \times 10^{1}$ & $-3.7087 \times 10^{-2}$ & $6.9656 \times 10^{-2}$ \\
+\hline
+\textbf{HXR} & $6.7849 \times 10^{5}$ & $6.7849 \times 10^{5}$ & $2.0209 \times 10^{3}$ & $3.3129 \times 10^{-1}$ & $-7.6470 \times 10^{-1}$ \\
+\hline
+\textbf{EUV} & $7.5482 \times 10^{5}$ & $7.5482 \times 10^{5}$ & $1.0072 \times 10^{3}$ & $-3.4448 \times 10^{-1}$ & $1.2862 \times 10^{-1}$ \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\subsection{Trial Duration}
+
+\begin{center}
+\begin{tabular}{|C{2in}|C{2in}|}
+\hline
+\textbf{Quantity} & \textbf{Value} \\
+\hline
+Total acquisition time & 2256.490~s \\
+\hline
+\end{tabular}
+\end{center}
+
+
+\subsection{Raw Voltage Time Series}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=6in]{Raw_Voltages.png}
+    \caption[Raw voltage vs.\ time (s) for all six ASIO channels.]{Raw voltage vs.\ time (s) for all six ASIO channels.}
+    \label{fig:full_raw}
+\end{figure}
+
+
+\subsection{FFTs of Raw Voltages}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=6in]{ASIO_FFT.png}
+    \caption[FFTs of raw voltages (mean centered).]{FFTs of raw voltages (mean centered).}
+    \label{fig:full_fft}
+\end{figure}
+
+
+\subsection{Detrended + EMI-filtered Time Series}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=6in]{Room_EMI_Removed_Voltages.png}
+    \caption[Voltage vs.\ time (s) after Savitzky--Golay detrending and 40~Hz EMI removal.]{Voltage vs.\ time (s) after Savitzky--Golay detrending and 40~Hz EMI removal.}
+    \label{fig:full_cleaned}
+\end{figure}
+
+
+\subsection{Noise Histograms}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=6in]{Room_EMI_Removed_Noise_Histograms.png}
+    \caption[Noise histograms after detrending and 40~Hz EMI removal. Red curve is a Gaussian fit.]{Noise histograms after detrending and 40~Hz EMI removal. Red curve is a Gaussian fit.}
+    \label{fig:full_hist}
+\end{figure}
+
+
+\subsection{Fe-55 Expectation Values}
+\textit{Fe-55 expectation values: not yet implemented.}
+
+\subsection*{Testing Notes}
+selection: whole dataset (t=0.0s–2256.5s)
+
+
+\end{document}

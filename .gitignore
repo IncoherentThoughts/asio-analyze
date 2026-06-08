@@ -5,6 +5,7 @@
 __pycache__/
 *.pyc
 *.egg-info/
+scripts/__pycache__/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -12,3 +13,6 @@ __pycache__/
 # IDE
 .idea/
 .vscode/
+
+# Claude
+.claude/

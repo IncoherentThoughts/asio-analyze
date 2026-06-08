@@ -1,0 +1,20 @@
+-------------------------------------------------
+2026/06/04-16:26:23 asio_end_test proc starting.
+ProcFile: /disk1/egsesw/galaxy/procs/asio_end_test.proc
+Mission:  muse
+Test_Sys: buboegse1
+FSW_Vers: 0.0.0.0
+OBS_Vers: 1.0
+Galaxy_V: 2405
+-------------------------------------------------
+
+2026/06/04-16:26:23 ASIO Science Test End
+2026/06/04-16:26:24 TlmGetV: PASSED: ASIO_TLM_PKT.ASIO_TIME = 328882
+2026/06/04-16:26:24 328882
+2026/06/04-16:26:24 TlmGetV: PASSED: ASIO_TLM_PKT.TIME_SECONDS = 1780590382
+2026/06/04-16:26:24 1780590382
+2026/06/04-16:26:24 TlmGetV: PASSED: ASIO_TLM_PKT.TIME_SUBSECS = 9062
+2026/06/04-16:26:24 9062
+
+-------------------------------------------------
+2026/06/04-16:26:24 20260604_162623_asio_end_test.rpt proc complete.

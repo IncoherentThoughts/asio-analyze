@@ -7,8 +7,8 @@ and PDF assembly have a stable place to call into.
 """
 
 
-def expectation_values(analysis_csv):
-    """Compute Fe-55 expectation values from a parsed analysis CSV.
+def expectation_values(df):
+    """Compute Fe-55 expectation values from a (6, N) voltage DataFrame.
 
     Not yet implemented. Returns None and prints a notice so callers can
     surface the placeholder state in their CSV / PDF output.

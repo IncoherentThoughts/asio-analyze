@@ -32,7 +32,6 @@ maps it to a voltage in [0, 5).
 import csv
 
 import numpy as np
-import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
 
@@ -218,10 +217,3 @@ def get_data_dict(file):
     return out
 
 
-# Channel-name-first CSV layout consumed downstream by ``latex_report._prepare_analysis_csv``.
-def dictionary_to_csv(data_dict, filename="output.csv"):
-    """Write the 6 voltage channels (only) to a CSV in channel-row layout."""
-    filtered = {k: data_dict[k] for k in CHANNEL_NAMES if k in data_dict}
-    df = pd.DataFrame.from_dict(filtered).T
-    df.to_csv(filename, header=None)
-    print(f"Saved {filename}")

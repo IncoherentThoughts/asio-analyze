@@ -347,13 +347,17 @@ class _TeeStream(io.TextIOBase):
 
 
 def _snapshot_outputs(analysis_dir):
-    """Return {abs_path: mtime} for every file in `analysis_dir` (non-recursive)."""
+    """Return {abs_path: mtime} for every file under `analysis_dir` (recursive).
+
+    Outputs are split into pdf/, csv/, tex/ subfolders by ``commands._setup_run``,
+    so this walks the tree rather than scanning a single level.
+    """
     if not analysis_dir or not os.path.isdir(analysis_dir):
         return {}
     snap = {}
-    for name in os.listdir(analysis_dir):
-        full = os.path.join(analysis_dir, name)
-        if os.path.isfile(full):
+    for root, _dirs, files in os.walk(analysis_dir):
+        for name in files:
+            full = os.path.join(root, name)
             try:
                 snap[full] = os.path.getmtime(full)
             except OSError:
@@ -797,7 +801,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 binaries, rpts_in_upload, ignored = _classify_upload(paths)
                 if not binaries:
                     raise ValueError(
-                        "no binary files found in selection "
+                        "No binary files found in selection "
                         "(expected names like 20260604.0x02B4)"
                     )
                 # rpt_paths comes from a follow-up picker; combined with any
@@ -869,6 +873,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 output_dir = os.path.abspath(os.path.expanduser(output_dir))
             params = {"directory": directory, "output_dir": output_dir, "note": note,
                       "emit_pdf": emit_pdf}
+            if command != "ltv":
+                t0 = payload.get("t0")
+                t1 = payload.get("t1")
+                if t0 is not None and t1 is not None:
+                    try:
+                        params["window"] = (float(t0), float(t1))
+                    except (TypeError, ValueError):
+                        self._send_json(
+                            {"ok": False, "error": "t0/t1 must be numeric"},
+                            status=400,
+                        )
+                        return
             if command == "ltv":
                 try:
                     lpt_t0 = float(payload.get("lpt_t0"))
@@ -1021,9 +1037,10 @@ header.menubar{display:grid;grid-template-columns:1fr auto;align-items:center;
 [data-theme="light"] .sun{display:none}
 [data-theme="light"] .moon{display:block}
 .workspace{position:relative;display:flex;min-height:0;min-width:0;overflow:hidden}
+.plotcol{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
 .plotwrap{position:relative;flex:1;min-width:0;min-height:0;background:var(--bg)}
 .dropzone-stage{position:absolute;inset:0;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:20px;padding:32px}
+  align-items:center;justify-content:center;gap:20px;padding:32px;overflow-y:auto}
 .proc-mode{display:flex;flex-direction:column;align-items:center;gap:8px}
 .proc-mode .pm-label{font-size:0.75rem;color:var(--dim);font-weight:600}
 .proc-toggle{display:inline-flex;background:var(--panel);border:1px solid var(--border);
@@ -1060,14 +1077,22 @@ header.menubar{display:grid;grid-template-columns:1fr auto;align-items:center;
 .dropzone .hint b{color:var(--dim);font-weight:600}
 .rpt-prompt{cursor:default}
 .rpt-prompt:hover{border-color:var(--border-strong);background:var(--bg-elevated);transform:none}
-.prompt-actions{display:flex;gap:10px;margin-top:18px;justify-content:center}
-.load-error{max-width:min(900px,90%);margin-top:16px;padding:12px 16px;
+.prompt-actions{display:flex;gap:10px;margin-top:18px;justify-content:center;align-items:stretch}
+.prompt-actions .browse{margin-top:0;padding:8px 18px;border-radius:6px;font-size:0.8125rem;line-height:1.2}
+.prompt-actions .btn-mini{padding:8px 18px;font-size:0.8125rem;line-height:1.2}
+.load-error{max-width:min(900px,90%);padding:12px 16px;
   background:color-mix(in srgb,var(--red) 12%,var(--bg-elevated));
   border:1px solid var(--red);border-radius:8px;color:var(--text);font-size:0.8125rem;line-height:1.5}
 .load-error b{color:var(--red);font-weight:600}
 .plot-canvas-host{position:absolute;inset:0}
 .plot-canvas-host canvas{display:block;width:100%;height:100%}
-.plot-overlay{position:absolute;inset:0;pointer-events:none}
+.plot-overlay{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.zoom-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--bg-chrome);border-bottom:1px solid var(--border);
+  font-family:"JetBrainsMono Nerd Font","JetBrains Mono",monospace;font-size:0.7188rem;flex-shrink:0}
+.zoom-bar .zoom-lbl{color:var(--dim);text-transform:uppercase;letter-spacing:0.06em;font-size:0.625rem}
+.zoom-bar .zoom-sep,.zoom-bar .zoom-unit{color:var(--dim)}
+.zoom-input{width:96px;padding:5px 8px}
 .seg{position:absolute;pointer-events:auto;cursor:pointer;transition:background .12s}
 .seg:hover{background:color-mix(in srgb,var(--seg-sel) 55%,transparent) !important}
 .seg.fill-a{background:var(--seg-a)}
@@ -1188,10 +1213,9 @@ select.input{appearance:none;-webkit-appearance:none;padding-right:28px;
   border-radius:6px;padding:7px 9px;font-family:"JetBrainsMono Nerd Font","JetBrains Mono",monospace;
   font-size:0.7188rem;color:var(--text-strong);cursor:pointer}
 .outfile:hover{background:var(--hover)}
-.outfile.latest{border-color:var(--focus);
-  background:color-mix(in srgb,var(--focus) 10%,var(--panel));
-  box-shadow:0 0 0 1px var(--focus),0 0 0 4px color-mix(in srgb,var(--focus) 18%,transparent)}
-.outfile.latest:hover{background:color-mix(in srgb,var(--focus) 16%,var(--panel))}
+.outfile.latest{border-color:color-mix(in srgb,var(--focus) 35%,transparent);
+  background:color-mix(in srgb,var(--focus) 5%,transparent)}
+.outfile.latest:hover{background:color-mix(in srgb,var(--focus) 9%,transparent)}
 .outfile .badge{font-size:0.5625rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;
   padding:2px 6px;border-radius:4px;color:var(--on-accent);background:var(--dim);flex-shrink:0}
 .outfile.csv .badge{background:var(--green)}
@@ -1292,6 +1316,8 @@ const S = {
   segLabels: {},        // index -> custom label
   selection: null,      // {lo, hi}
   anchor: null,
+  viewT0: null,         // null = use 0
+  viewT1: null,         // null = use S.data.T
   processMode: localStorage.getItem("asio-process-mode") || "segment",  // "segment" | "whole"
   config: { mode:"default", outputDir:"", note:"", emitPdf:false,
             ltv: { lptIdx: null, dataIdx: null } },
@@ -1408,6 +1434,7 @@ async function runLoad(){
     S.data = res.data;
     S.file = res.data.file;
     S.selection = null; S.anchor = null; S.segLabels = {}; S.result = null;
+    S.viewT0 = null; S.viewT1 = null;
     S.config.ltv = { lptIdx: null, dataIdx: null };
     setStatus("loaded", "Loaded");
     render();
@@ -1432,6 +1459,7 @@ function cancelLoad(){
 function closeFile(){
   S.file = null; S.data = null; S.selection = null; S.anchor = null;
   S.segLabels = {}; S.result = null;
+  S.viewT0 = null; S.viewT1 = null;
   S.config.ltv = { lptIdx: null, dataIdx: null };
   S.pendingPaths = null; S.pendingRpts = null; S.needsRpts = null;
   S.loadError = null;
@@ -1499,11 +1527,57 @@ function renderFileChip(){
       onclick: closeFile, html:'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>'})
   );
 }
+function renderZoomBar(){
+  const T = (S.data && S.data.T) || 0;
+  const bar = el("div", {class:"zoom-bar"});
+  bar.appendChild(el("span", {class:"zoom-lbl"}, "View"));
+  const mk = (key, val, ph) => {
+    const i = el("input", {
+      class:"input zoom-input", type:"number", step:"0.1",
+      min:"0", max: String(T.toFixed(3)),
+      placeholder: ph,
+      value: (val != null ? String(val) : ""),
+    });
+    i.addEventListener("change", () => applyZoom(key, i.value));
+    i.addEventListener("keydown", (e) => { if (e.key === "Enter") i.blur(); });
+    return i;
+  };
+  bar.appendChild(mk("viewT0", S.viewT0, "0.0"));
+  bar.appendChild(el("span", {class:"zoom-sep"}, "→"));
+  bar.appendChild(mk("viewT1", S.viewT1, T.toFixed(1)));
+  bar.appendChild(el("span", {class:"zoom-unit"}, "s"));
+  const reset = el("button", {class:"btn-mini", type:"button",
+    onclick: () => { S.viewT0 = null; S.viewT1 = null; renderWorkspace(); }
+  }, "Reset");
+  bar.appendChild(reset);
+  return bar;
+}
+function applyZoom(key, raw){
+  const T = (S.data && S.data.T) || 0;
+  const s = (raw || "").trim();
+  if (s === ""){ S[key] = null; }
+  else {
+    let n = parseFloat(s);
+    if (!isFinite(n)) { renderWorkspace(); return; }
+    n = Math.max(0, Math.min(T, n));
+    S[key] = n;
+  }
+  const lo = (S.viewT0 != null) ? S.viewT0 : 0;
+  const hi = (S.viewT1 != null) ? S.viewT1 : T;
+  if (hi - lo < 1e-6){
+    if (key === "viewT0") S.viewT0 = null;
+    else S.viewT1 = null;
+  }
+  renderWorkspace();
+}
 function renderWorkspace(){
   const ws = $("workspace");
   ws.innerHTML = "";
+  const col = el("div", {class:"plotcol"});
+  ws.appendChild(col);
   const plot = el("div", {class:"plotwrap", id:"plotwrap"});
-  ws.appendChild(plot);
+  if (S.file) col.appendChild(renderZoomBar());
+  col.appendChild(plot);
   if (!S.file){
     plot.appendChild(renderDropzone());
     return;
@@ -1570,6 +1644,11 @@ function renderDropzone(){
     return stage;
   }
 
+  if (S.loadError){
+    stage.appendChild(el("div", {class:"load-error"},
+      el("b", {}, "Couldn't load: "), S.loadError));
+  }
+
   const dz = el("div", {class:"dropzone", id:"dropzone"},
     el("div", {class:"glyph", html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'}),
     el("h2", {}, "Drop binaries and .rpt files to begin"),
@@ -1578,11 +1657,6 @@ function renderDropzone(){
   );
   dz.addEventListener("click", pickAndLoad);
   stage.appendChild(dz);
-
-  if (S.loadError){
-    stage.appendChild(el("div", {class:"load-error"},
-      el("b", {}, "Couldn't load: "), S.loadError));
-  }
   // drag
   ["dragenter","dragover"].forEach(ev => stage.addEventListener(ev, (e)=>{
     e.preventDefault(); dz.classList.add("drag");
@@ -1636,9 +1710,15 @@ function plotLayout(){
   }
   return { W, H, dataLeft, dataRight, dataTop, dataBottom, rects };
 }
+function viewRange(){
+  const T = (S.data && S.data.T) || 0;
+  const t0 = (S.viewT0 != null) ? S.viewT0 : 0;
+  const t1 = (S.viewT1 != null) ? S.viewT1 : T;
+  return { t0, t1, span: Math.max(t1 - t0, 1e-9) };
+}
 function tToX(t, lay){
-  const T = S.data.T;
-  return lay.dataLeft + (t/T) * (lay.dataRight - lay.dataLeft);
+  const v = viewRange();
+  return lay.dataLeft + ((t - v.t0) / v.span) * (lay.dataRight - lay.dataLeft);
 }
 function drawPlot(){
   if (!S.data) return;
@@ -1716,8 +1796,9 @@ function drawPlot(){
   ctx.fillStyle = dim;
   ctx.textAlign = "center";
   const ticks = 8;
+  const v = viewRange();
   for (let i=0; i<=ticks; i++){
-    const t = (S.data.T) * i / ticks;
+    const t = v.t0 + v.span * i / ticks;
     const x = tToX(t, lay);
     ctx.strokeStyle = gridStrong;
     ctx.beginPath(); ctx.moveTo(x, lay.dataBottom); ctx.lineTo(x, lay.dataBottom + 5); ctx.stroke();
@@ -1865,12 +1946,23 @@ function drawOverlay(){
     });
     ov.appendChild(headerHit);
 
-    // label chip — clamp center so the chip stays inside the plot area
+    // label chip — center over the VISIBLE portion of the segment so very
+    // long segments (whose true midpoint is off-screen) still get a chip
+    // that sits over the part of the segment the user can actually see.
+    // Estimate the chip's half-width from its label (≈7px per char + 16px
+    // padding + 2px border) rather than using a fixed 90px clamp — the old
+    // clamp matched the chip's *max-width*, which forced narrow single-char
+    // chips like "1" to sit ~75px to the right of their actual segment when
+    // that segment lived near the left edge of the plot.
     const labelTop = Math.max(4, lay.dataTop - 26);
-    const CHIP_HALF = 90; // half of max chip width (matches max-width:170 + padding)
+    const labelText = segLabel(i) || "";
+    const chipHalf = Math.min(85, Math.max(10, labelText.length * 4 + 9));
+    const visX0 = Math.max(x0, lay.dataLeft);
+    const visX1 = Math.min(x1, lay.dataRight);
+    const visMid = (visX1 >= visX0) ? (visX0 + visX1) / 2 : (x0 + x1) / 2;
     const center = Math.min(
-      Math.max((x0 + x1) / 2, lay.dataLeft + CHIP_HALF),
-      lay.dataRight - CHIP_HALF
+      Math.max(visMid, lay.dataLeft + chipHalf),
+      lay.dataRight - chipHalf
     );
     const lblWrap = el("div", {
       class: "seg-label" + (sel ? " sel" : ""),
@@ -2206,7 +2298,10 @@ async function runAnalysis(){
     command: S.config.mode,
     directory: S.file.path,
     output_dir: S.config.outputDir || null,
-    emit_pdf: S.config.emitPdf,
+    // The toggle is only shown for "default"; every other mode is intrinsically
+    // a PDF report and the backend defaults to emit_pdf=True for them, so we
+    // must explicitly opt-in here (the API handler defaults to False).
+    emit_pdf: S.config.mode === "default" ? S.config.emitPdf : true,
   };
   if (isLtv){
     if (whole) return;
@@ -2233,6 +2328,7 @@ async function runAnalysis(){
       labels = (sel.lo === sel.hi)
         ? ("test " + segLabel(sel.lo))
         : ("tests " + segLabel(sel.lo) + "–" + segLabel(sel.hi));
+      body.t0 = t0; body.t1 = t1;
     }
     scopedNote =
       "selection: " + labels + " (t=" + t0.toFixed(1) + "s–" + t1.toFixed(1) + "s)" +

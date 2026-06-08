@@ -1,10 +1,8 @@
 """LaTeX-based report builders for the asio-analyze CLI.
 
-Each `create_*_report` is the LaTeX-styled drop-in replacement for the old
-`create_*_pdf` builders in `pdf.py`. Reports are styled to match existing ASIO
-documentation (helvet sans-serif, fancy header band with doc number, booktabs
-+ longtable, figure[H] floats) so they can be appended to existing test
-documents as an appendix.
+Reports are styled to match existing ASIO documentation (helvet sans-serif,
+fancy header band with doc number, booktabs + longtable, figure[H] floats)
+so they can be appended to existing test documents as an appendix.
 
 Public surface:
     create_default_report(filename, stats_basic, duration_s, raw_voltages_img,
@@ -14,11 +12,13 @@ Public surface:
                              section_offset=0)
     create_fe55_report(filename, stats_basic, raw_voltages_img,
                        subtitle=None, note=None, section_offset=0)
+    create_ltv_report(filename, ltv_summary, lpt_window, data_window,
+                      raw_voltages_img, subtitle=None, note=None,
+                      section_offset=0)
     create_full_report(filename, stats_raw_full, stats_detrended_full,
                        duration_s, image_paths, subtitle=None, note=None,
                        section_offset=0)
 
-All four call signatures mirror the legacy `pdf.py` ones with one addition:
 `section_offset` (default 0) emits `\\setcounter{section}{N}` so the report's
 section numbers continue from a parent document when appended.
 
@@ -37,16 +37,16 @@ from . import get_data
 
 
 # ---------------------------------------------------------------------------
-# Shared input prep (moved from pdf.py)
+# Shared input prep
 # ---------------------------------------------------------------------------
 
-_ANALYSIS_CHANNEL_NAMES = {"SXR1", "SXR2", "SXR3", "SXR4", "HXR", "EUV"}
+_ANALYSIS_CHANNEL_NAMES = ("SXR1", "SXR2", "SXR3", "SXR4", "HXR", "EUV")
 
 
 def _is_analysis_format(file_path):
     """True when the CSV is already in the (channel-name, samples...) layout
-    that `get_data.dictionary_to_csv` emits. Detected by checking that the
-    first column of the first row is one of the canonical channel names."""
+    used by analysis. Detected by checking that the first column of the first
+    row is one of the canonical channel names."""
     try:
         with open(file_path, "rb") as f:
             raw = f.read(128)
@@ -59,24 +59,25 @@ def _is_analysis_format(file_path):
     except (UnicodeDecodeError, IndexError):
         return False  # binary file: definitely not the analysis layout
     head = first.split(",", 1)[0].strip()
-    return head in _ANALYSIS_CHANNEL_NAMES
+    return head in set(_ANALYSIS_CHANNEL_NAMES)
 
 
-def _prepare_analysis_csv(file_path):
-    """Parse an ASIO packet CSV into the GSE-formatted CSV used by analysis fns.
+def _prepare_analysis_frame(file_path):
+    """Parse an ASIO capture into an in-memory (6, N) voltage DataFrame.
 
-    Returns the path to the temporary analysis CSV (under <dir>/misc/output.csv).
-    If `file_path` is already in the analysis layout (channel-name first column),
-    it is returned unchanged so already-prepared inputs flow through untouched.
+    The frame has one row per channel in canonical order, with no
+    channel-name column. If `file_path` is already in the channel-name-first
+    CSV layout, it is read directly; otherwise the binary parser is used.
     """
+    import pandas as pd
+
     if _is_analysis_format(file_path):
-        return file_path
-    data_dictionary = get_data.get_data_dict(file_path)
-    misc_dir = os.path.join(os.path.dirname(file_path), "misc")
-    os.makedirs(misc_dir, exist_ok=True)
-    analysis_csv = os.path.join(misc_dir, "output.csv")
-    get_data.dictionary_to_csv(data_dictionary, analysis_csv)
-    return analysis_csv
+        df = pd.read_csv(file_path, header=None)
+        df = df.drop(df.columns[0], axis=1).reset_index(drop=True)
+        df.columns = range(df.shape[1])
+        return df
+    d = get_data.get_data_dict(file_path)
+    return pd.DataFrame([d[name] for name in _ANALYSIS_CHANNEL_NAMES])
 
 
 # ---------------------------------------------------------------------------
@@ -245,30 +246,17 @@ def _stats_longtable(stats, columns, caption, label):
     body = "\n\\hline\n".join(body_rows)
 
     return rf"""
-\begin{{center}}
-\begin{{longtable}}{{{col_spec}}}
-\caption{{{caption}}} \label{{{label}}} \\
+\begin{{table}}[H]
+\centering
+\caption{{{caption}}} \label{{{label}}}
+\begin{{tabular}}{{{col_spec}}}
 \hline
 {header}
 \hline
-\endfirsthead
-
-\hline
-{header}
-\hline
-\endhead
-
-\hline
-\multicolumn{{{n_cols}}}{{r}}{{\emph{{Continued on next page}}}} \\
-\endfoot
-
-\hline
-\endlastfoot
-
 {body}
 \hline
-\end{{longtable}}
-\end{{center}}
+\end{{tabular}}
+\end{{table}}
 """
 
 
@@ -404,30 +392,17 @@ def _ltv_relative_diff_table(summary_rows, lpt_window, data_window, label):
     )
 
     return rf"""
-\begin{{center}}
-\begin{{longtable}}{{{col_spec}}}
-\caption{{{caption}}} \label{{{label}}} \\
+\begin{{table}}[H]
+\centering
+\caption{{{caption}}} \label{{{label}}}
+\begin{{tabular}}{{{col_spec}}}
 \hline
 {header}
 \hline
-\endfirsthead
-
-\hline
-{header}
-\hline
-\endhead
-
-\hline
-\multicolumn{{4}}{{r}}{{\emph{{Continued on next page}}}} \\
-\endfoot
-
-\hline
-\endlastfoot
-
 {body}
 \hline
-\end{{longtable}}
-\end{{center}}
+\end{{tabular}}
+\end{{table}}
 """
 
 

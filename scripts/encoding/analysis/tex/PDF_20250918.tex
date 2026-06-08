@@ -1,0 +1,128 @@
+\documentclass[12pt]{article}
+\usepackage[scaled]{helvet}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{ragged2e}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage[skip=12pt]{parskip}
+\usepackage{enumitem}
+\usepackage[font={small,it}]{caption}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{underscore}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor,colortbl}
+\usepackage{fancyhdr}
+
+\renewcommand\familydefault{\sfdefault}
+\captionsetup{justification=centering,singlelinecheck=false,format=hang}
+\geometry{letterpaper, margin=1in}
+\graphicspath{ {./} }
+\pagenumbering{arabic}
+\renewcommand\arraystretch{1.5}
+\setlength\LTleft\fill
+\setlength\LTright\fill
+
+\newcommand{\PreserveBackslash}[1]{\let\temp=\\#1\let\\=\temp}
+\newcolumntype{C}[1]{>{\PreserveBackslash\centering}p{#1}}
+\newcolumntype{R}[1]{>{\PreserveBackslash\raggedleft}p{#1}}
+\newcolumntype{L}[1]{>{\PreserveBackslash\raggedright}p{#1}}
+
+\newcommand{\docAbr}{ASIO ANALYSIS}
+\newcommand{\docNum}{ASIO-ANALYSIS-20250918}
+\newcommand{\dateEdit}{06/04/2026}
+\newcommand{\revNum}{0.0}
+
+\newgeometry{top=1.25in,left=1in,right=1in,bottom=1in,headheight=0.8in,headsep=24pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{gray}{\docAbr} \vspace{6pt}}
+\fancyhead[C]{\textcolor{gray}{\docNum} \vspace{6pt}}
+\fancyhead[R]{\textcolor{gray}{\dateEdit} \vspace{6pt}}
+\fancyfoot[R]{Page: \hspace{6pt} \thepage}
+\fancyfoot[L]{\textcolor{gray}{Revision~\revNum}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\captionsetup{belowskip=0pt}
+\captionsetup{aboveskip=10pt}
+
+\begin{document}
+
+
+\section{ASIO Default Analysis Report}
+
+This report summarizes the analysis of dataset \path{20250918.0x0002}. The trial spans 599.49~s of continuous data acquisition across all six channels.
+Statistics below are raw (no detrending, no EMI filtering); units are femtoamps.
+
+\subsection{Current Statistics}
+
+\noindent\begin{longtable}{|C{0.9in}|C{1.8in}|C{1.8in}|C{1.8in}|}
+\caption{Raw Current Statistics} \label{tab:default_stats} \\
+\hline
+\textbf{Channel} & \textbf{Mean (fA)} & \textbf{RMS (fA)} & \textbf{Std Dev (fA)} \\
+\hline
+\endfirsthead
+
+\hline
+\textbf{Channel} & \textbf{Mean (fA)} & \textbf{RMS (fA)} & \textbf{Std Dev (fA)} \\
+\hline
+\endhead
+
+\hline
+\multicolumn{4}{r}{\emph{Continued on next page}} \\
+\endfoot
+
+\hline
+\endlastfoot
+
+\textbf{SXR1} & $5.4265 \times 10^{4}$ & $5.4265 \times 10^{4}$ & $6.2986 \times 10^{1}$ \\
+\hline
+\textbf{SXR2} & $5.3759 \times 10^{4}$ & $5.3760 \times 10^{4}$ & $8.3070 \times 10^{1}$ \\
+\hline
+\textbf{SXR3} & $5.3992 \times 10^{4}$ & $5.3992 \times 10^{4}$ & $5.5859 \times 10^{1}$ \\
+\hline
+\textbf{SXR4} & $5.3238 \times 10^{4}$ & $5.3238 \times 10^{4}$ & $7.1618 \times 10^{1}$ \\
+\hline
+\textbf{HXR} & $6.7941 \times 10^{5}$ & $6.7941 \times 10^{5}$ & $7.4329 \times 10^{2}$ \\
+\hline
+\textbf{EUV} & $7.6807 \times 10^{5}$ & $7.6807 \times 10^{5}$ & $1.0985 \times 10^{3}$ \\
+\hline
+\end{longtable}
+
+
+\subsection{Raw Voltage Time Series}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=6in]{Raw_Voltages.png}
+    \caption[Raw voltage vs.\ time (s) for all six ASIO channels.]{Raw voltage vs.\ time (s) for all six ASIO channels.}
+    \label{fig:default_raw}
+\end{figure}
+
+
+\subsection{Trial Duration}
+
+\begin{center}
+\begin{tabular}{|C{2in}|C{2in}|}
+\hline
+\textbf{Quantity} & \textbf{Value} \\
+\hline
+Total acquisition time & 599.490~s \\
+\hline
+\end{tabular}
+\end{center}
+
+
+\subsection*{Testing Notes}
+selection: whole dataset (t=0.0s–599.5s)
+Background test
+
+
+\end{document}
